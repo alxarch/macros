@@ -3,6 +3,8 @@ package macros
 import (
 	"bytes"
 	"io"
+	"net/url"
+	"sort"
 	"strings"
 )
 
@@ -10,6 +12,42 @@ type Template struct {
 	chunks [][]byte
 	macros []string
 	tail   []byte
+}
+
+func URLTemplate(rawurl, start, end string, params map[string]string) (string, error) {
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		return rawurl, err
+	}
+	q := u.Query()
+	for key, macro := range params {
+		q.Set(key, start+macro+end)
+	}
+	bs := strings.Builder{}
+	keys := make([]string, 0, len(q))
+	for k := range q {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i, k := range keys {
+		if i > 0 {
+			bs.WriteByte('&')
+		}
+		for j, v := range q[k] {
+			if j > 0 {
+				bs.WriteByte('&')
+			}
+			bs.WriteString(url.QueryEscape(k))
+			bs.WriteByte('=')
+			if _, isMacro := params[k]; isMacro {
+				bs.WriteString(v)
+			} else {
+				bs.WriteString(url.QueryEscape(v))
+			}
+		}
+	}
+	u.RawQuery = bs.String()
+	return u.String(), nil
 }
 
 func NewTemplate(tpl, start, end string) *Template {

@@ -38,3 +38,18 @@ func TestTemplate(t *testing.T) {
 		t.Errorf("Invalid result: %s", buf.String())
 	}
 }
+
+func TestURLTemplate(t *testing.T) {
+	params := map[string]string{
+		"foo": "FOO",
+		"bar": "BAR",
+	}
+	tpl, err := URLTemplate("http://example.org/foo/bar?foo=bar&bar=baz&baz=foo", "${", "}", params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect := "http://example.org/foo/bar?bar=${BAR}&baz=foo&foo=${FOO}"
+	if tpl != expect {
+		t.Errorf("Invalid url %s != %s", tpl, expect)
+	}
+}
