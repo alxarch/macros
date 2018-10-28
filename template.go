@@ -137,8 +137,17 @@ func (t *Template) ExecuteBuffer(w io.Writer, a ReplacerFunc, buf []byte) (n int
 	return
 }
 
+type NopReplacer struct{}
+
+func (NopReplacer) Replace(dst []byte, _ string) ([]byte, error) {
+	return dst, nil
+}
+
 func (t *Template) Append(dst []byte, a Replacer) ([]byte, error) {
 	var err error
+	if a == nil {
+		a = NopReplacer{}
+	}
 	for i, chunk := range t.chunks {
 		dst = append(dst, chunk...)
 		dst, err = a.Replace(dst, t.macros[i])
