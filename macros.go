@@ -62,6 +62,22 @@ type Replacer interface {
 
 type ReplacerFunc func(dst []byte, macro string) ([]byte, error)
 
+func Replacements(pairs ...string) Replacer {
+	return replacePairs(pairs)
+}
+
+type replacePairs []string
+
+func (r replacePairs) Replace(dst []byte, macro string) ([]byte, error) {
+	for len(r) > 1 {
+		if r[0] == macro {
+			return append(dst, r[1]...), nil
+		}
+		r = r[2:]
+	}
+	return dst, nil
+}
+
 func (f ReplacerFunc) Replace(dst []byte, macro string) ([]byte, error) {
 	return f(dst, macro)
 }
