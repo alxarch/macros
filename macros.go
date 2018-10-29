@@ -4,26 +4,16 @@ import (
 	"bytes"
 )
 
-type Replacer interface {
-	Replace(dst []byte, macro string) ([]byte, error)
-}
-
-type ReplacerFunc func(dst []byte, macro string) ([]byte, error)
-
-func (f ReplacerFunc) Replace(dst []byte, macro string) ([]byte, error) {
-	return f(dst, macro)
+type QuickTemplate struct {
+	start, end []byte
 }
 
 func Quick(start, end string) *QuickTemplate {
 	return &QuickTemplate{s2b(start), s2b(end)}
 }
 
-type QuickTemplate struct {
-	start, end []byte
-}
-
 // Replace replaces macros in a template and appends the output to dst.
-func (t *QuickTemplate) Replace(dst []byte, tpl string, r ReplacerFunc) ([]byte, error) {
+func (t *QuickTemplate) Replace(dst []byte, tpl string, r Replacer) ([]byte, error) {
 	var (
 		b   = s2b(tpl)
 		s   = t.start
@@ -31,6 +21,9 @@ func (t *QuickTemplate) Replace(dst []byte, tpl string, r ReplacerFunc) ([]byte,
 		i   int
 		err error
 	)
+	if r == nil {
+		r = NopReplacer{}
+	}
 	for {
 		i = bytes.Index(b, s)
 		if 0 <= i && i < len(b) {
@@ -39,7 +32,7 @@ func (t *QuickTemplate) Replace(dst []byte, tpl string, r ReplacerFunc) ([]byte,
 				b = b[i:]
 				i = bytes.Index(b, e)
 				if 0 <= i && i < len(b) {
-					dst, err = r(dst, b2s(b[:i]))
+					dst, err = r.Replace(dst, b2s(b[:i]))
 					if err != nil {
 						return dst, err
 					}
@@ -60,6 +53,26 @@ func (t *QuickTemplate) Replace(dst []byte, tpl string, r ReplacerFunc) ([]byte,
 		}
 	}
 	dst = append(dst, b...)
+	return dst, nil
+}
+
+type Replacer interface {
+	Replace(dst []byte, macro string) ([]byte, error)
+}
+
+type ReplacerFunc func(dst []byte, macro string) ([]byte, error)
+
+func (f ReplacerFunc) Replace(dst []byte, macro string) ([]byte, error) {
+	return f(dst, macro)
+}
+
+type NopReplacer struct{}
+
+func (NopReplacer) Replace(dst []byte, _ string) ([]byte, error) {
+	return dst, nil
+}
+
+func nopReplace(dst []byte, _ string) ([]byte, error) {
 	return dst, nil
 }
 

@@ -5,7 +5,7 @@ import (
 )
 
 func TestReplaceMacros(t *testing.T) {
-	a := func(dst []byte, tag string) ([]byte, error) {
+	a := ReplacerFunc(func(dst []byte, tag string) ([]byte, error) {
 		switch tag {
 		case "FOO":
 			dst = append(dst, "foo"...)
@@ -15,7 +15,7 @@ func TestReplaceMacros(t *testing.T) {
 			dst = append(dst, "baz"...)
 		}
 		return dst, nil
-	}
+	})
 	tpl := Quick("${", "}")
 	w, err := tpl.Replace(nil, "${FOO} ${BAR} ${BAZ}", a)
 	if err != nil {
@@ -55,7 +55,7 @@ func TestReplaceMacros(t *testing.T) {
 
 func BenchmarkQuickTemplateReplace(b *testing.B) {
 	b.ReportAllocs()
-	a := func(dst []byte, tag string) ([]byte, error) {
+	a := ReplacerFunc(func(dst []byte, tag string) ([]byte, error) {
 		switch tag {
 		case "FOO":
 			dst = append(dst, "foo"...)
@@ -65,7 +65,7 @@ func BenchmarkQuickTemplateReplace(b *testing.B) {
 			dst = append(dst, "baz"...)
 		}
 		return dst, nil
-	}
+	})
 	w := make([]byte, 0, 64)
 	tpl := Quick("${", "}")
 	var err error

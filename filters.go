@@ -42,12 +42,16 @@ type Filters struct {
 	Filters FilterMap
 }
 
-func (r *Filters) Replace(dst []byte, macro string) ([]byte, error) {
+func (f *Filters) Replace(dst []byte, macro string) ([]byte, error) {
+	r := f.R
+	if r == nil {
+		r = nopReplace
+	}
 	for i := 0; 0 <= i && i < len(macro); i++ {
 		if macro[i] == ':' {
 			var err error
 			offset := len(dst)
-			dst, err = r.R(dst, macro[:i])
+			dst, err = r(dst, macro[:i])
 			if err != nil {
 				return dst[:offset], err
 			}
@@ -59,7 +63,7 @@ func (r *Filters) Replace(dst []byte, macro string) ([]byte, error) {
 					name = name[:j]
 				}
 				i += len(name)
-				filter := r.Filters[name]
+				filter := f.Filters[name]
 				if filter == nil {
 					return dst, fmt.Errorf("Missing macro filter %s", name)
 				}
@@ -73,5 +77,5 @@ func (r *Filters) Replace(dst []byte, macro string) ([]byte, error) {
 			return append(dst[:offset], value...), nil
 		}
 	}
-	return r.R(dst, macro)
+	return r(dst, macro)
 }
