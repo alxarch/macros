@@ -3,7 +3,7 @@ package macros
 import "testing"
 
 func TestFields(t *testing.T) {
-	fields := MacroValues{
+	values := MacroValues{
 		Bind("foo", String("bar")),
 		Bind("bar", Float(4.2)),
 		Bind("answer", Int(-42)),
@@ -12,45 +12,66 @@ func TestFields(t *testing.T) {
 		Bind("not", Bool(false)),
 	}
 	{
-		v := fields.ReplaceMacro("foo")
-		if buf := v.appendTo(nil); string(buf) != "bar" {
+		tpl := Must("${foo}")
+		buf, err := tpl.AppendTo(nil, values...)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		} else if string(buf) != "bar" {
 			t.Errorf("Invalid replacement %q", buf)
 		}
 	}
 	{
-		v := fields.ReplaceMacro("bar")
-		if buf := v.appendTo(nil); string(buf) != "4.2" {
+		tpl := Must("${bar}")
+		buf, err := tpl.AppendTo(nil, values...)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		} else if string(buf) != "4.2" {
 			t.Errorf("Invalid replacement %q", buf)
 		}
 	}
 	{
-		v := fields.ReplaceMacro("answer")
-		if buf := v.appendTo(nil); string(buf) != "-42" {
+		tpl := Must("${answer}")
+		buf, err := tpl.AppendTo(nil, values...)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		} else if string(buf) != "-42" {
 			t.Errorf("Invalid replacement %q", buf)
 		}
 	}
 	{
-		v := fields.ReplaceMacro("answer+")
-		if buf := v.appendTo(nil); string(buf) != "42" {
+		tpl := Must("${answer+}")
+		buf, err := tpl.AppendTo(nil, values...)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		} else if string(buf) != "42" {
 			t.Errorf("Invalid replacement %q", buf)
 		}
 	}
 	{
-		v := fields.ReplaceMacro("ok")
-		if buf := v.appendTo(nil); string(buf) != "true" {
+		tpl := Must("${ok}")
+		buf, err := tpl.AppendTo(nil, values...)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		} else if string(buf) != "true" {
 			t.Errorf("Invalid replacement %q", buf)
 		}
 	}
 	{
-		v := fields.ReplaceMacro("not")
-		if buf := v.appendTo(nil); string(buf) != "false" {
+		tpl := Must("${not}")
+		buf, err := tpl.AppendTo(nil, values...)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		} else if string(buf) != "false" {
 			t.Errorf("Invalid replacement %q", buf)
 		}
 	}
 	{
-		v := fields.ReplaceMacro("baz")
-		if !v.IsNone() {
-			t.Errorf("Invalid value %v", v)
+		tpl := Must("${bax}")
+		buf, err := tpl.AppendTo(nil, values...)
+		if err != ErrMacroNotFound {
+			t.Errorf("Unexpected error %s", err)
+		} else if buf != nil {
+			t.Errorf("Invalid buf %v", buf)
 		}
 	}
 

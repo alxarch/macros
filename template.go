@@ -1,8 +1,12 @@
 package macros
 
 import (
+	"errors"
+	"fmt"
+	"math"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -12,6 +16,7 @@ type Template struct {
 	tail       string
 	delimiters Delimiters
 	filters    Filters
+	rewrite    RewriteMacros
 }
 
 // Option is a Template option
@@ -22,6 +27,13 @@ type Option interface {
 type chunk struct {
 	prefix string
 	macro  string
+}
+
+// RewriteMacros allows to rewrite macros for a parsed template
+type RewriteMacros map[string]string
+
+func (m RewriteMacros) option(t *Template) {
+	t.rewrite = m
 }
 
 // Must creates a new templates or panics if there were any errors
@@ -43,6 +55,14 @@ func New(tpl string, options ...Option) (*Template, error) {
 	}
 	if err := t.parse(tpl); err != nil {
 		return nil, err
+	}
+
+	// Override macros
+	for i := range t.chunks {
+		chunk := &t.chunks[i]
+		if override, ok := t.rewrite[chunk.macro]; ok {
+			chunk.macro = override
+		}
 	}
 	return &t, nil
 }
@@ -107,15 +127,42 @@ func (t *Template) EstimateSize(size int) int {
 	return size
 }
 
-func (t *Template) replaceMacro(buf []byte, macro string, values MacroValues) ([]byte, error) {
+func (t *Template) replace(buf []byte, macro string, values MacroReplacer) ([]byte, error) {
+	v := values.ReplaceMacro(macro)
+	switch v.typ {
+	case fieldTypeNone:
+		return nil, ErrMacroNotFound
+	case fieldTypeString:
+		return append(buf, v.str...), nil
+	case fieldTypeFloat:
+		f := math.Float64frombits(v.num)
+		return strconv.AppendFloat(buf, f, 'f', -1, 64), nil
+	case fieldTypeUint:
+		return strconv.AppendUint(buf, v.num, 10), nil
+	case fieldTypeInt:
+		return strconv.AppendInt(buf, int64(v.num), 10), nil
+	case fieldTypeAny:
+		switch v := v.any.(type) {
+		case fmt.Stringer:
+			return append(buf, v.String()...), nil
+		case []byte:
+			return append(buf, v...), nil
+		default:
+			var w strings.Builder
+			fmt.Fprintf(&w, "%s", v)
+			return append(buf, w.String()...), nil
+		}
+	default:
+		return nil, errors.New("Invalid value type")
+	}
+}
+func (t *Template) replaceMacro(buf []byte, macro string, values MacroReplacer) ([]byte, error) {
 	macro, filters := splitMacro(macro)
 	offset := len(buf)
-	v := values.ReplaceMacro(macro)
-	if v.typ == fieldTypeNone {
-		return nil, ErrMacroNotFound
+	buf, err := t.replace(buf, macro, values)
+	if err != nil {
+		return buf[:offset], err
 	}
-	buf = v.appendTo(buf)
-	var err error
 	if len(filters) == 0 {
 		return buf, nil
 	}

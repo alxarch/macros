@@ -2,10 +2,7 @@ package macros
 
 import (
 	"errors"
-	"fmt"
 	"math"
-	"strconv"
-	"strings"
 )
 
 // MacroReplacer provides a value to replace a macro token.
@@ -68,26 +65,6 @@ type MacroValue struct {
 // IsNone checks if a value is None value
 func (v *Value) IsNone() bool {
 	return v.typ == fieldTypeNone
-}
-
-func (v *Value) appendTo(buf []byte) []byte {
-	switch v.typ {
-	case fieldTypeString:
-		return append(buf, v.str...)
-	case fieldTypeFloat:
-		f := math.Float64frombits(v.num)
-		return strconv.AppendFloat(buf, f, 'f', -1, 64)
-	case fieldTypeUint:
-		return strconv.AppendUint(buf, v.num, 10)
-	case fieldTypeInt:
-		return strconv.AppendInt(buf, int64(v.num), 10)
-	case fieldTypeAny:
-		var w strings.Builder
-		fmt.Fprintf(&w, "%s", v.any)
-		return append(buf, w.String()...)
-	default:
-		return buf
-	}
 }
 
 // String creates a new MacroValue field for a string value
