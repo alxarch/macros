@@ -25,7 +25,20 @@ func TestHex(t *testing.T) {
 		t.Error(err)
 	}
 	if string(data) != string(expect) {
-		t.Errorf("Invalid filter %s", data)
+		t.Errorf("Invalid filter result %q", data)
 	}
 
+}
+
+func TestFilters(t *testing.T) {
+	tpl := Must("${foo:hex}", Filters{
+		"hex": Hex,
+	})
+	buf, err := tpl.AppendTo(nil, Bind("foo", String("\x00\xff")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(buf) != "00ff" {
+		t.Errorf("Invalid filter replacement %q", buf)
+	}
 }

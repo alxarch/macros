@@ -3,18 +3,19 @@ package macros
 import (
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"net/url"
-	"strings"
 )
 
+// Filter is a converter for values
 type Filter func(dst, value []byte) ([]byte, error)
 
+// QueryEscape is a filter escaping a value for URL query strings
 func QueryEscape(dst, value []byte) ([]byte, error) {
-	q := url.QueryEscape(b2s(value))
+	q := url.QueryEscape(string(value))
 	return append(dst, q...), nil
 }
 
+// Base64 is a filter converting a value to base64 string
 func Base64(dst, value []byte) ([]byte, error) {
 	size := base64.StdEncoding.EncodedLen(len(value))
 	buf := make([]byte, size)
@@ -22,6 +23,7 @@ func Base64(dst, value []byte) ([]byte, error) {
 	return append(dst, buf...), nil
 }
 
+// Base64URL is a filter converting a value to base64 string for URLs
 func Base64URL(dst, value []byte) ([]byte, error) {
 	size := base64.URLEncoding.EncodedLen(len(value))
 	buf := make([]byte, size)
@@ -29,53 +31,46 @@ func Base64URL(dst, value []byte) ([]byte, error) {
 	return append(dst, buf...), nil
 }
 
+// Hex is a filter converting a value to hex string
 func Hex(dst, value []byte) ([]byte, error) {
 	buf := make([]byte, 2*len(value))
 	hex.Encode(buf, value)
 	return append(dst, buf...), nil
 }
 
-type FilterMap map[string]Filter
+// Filters is a series of filters to apply to replacements
+type Filters map[string]Filter
 
-type Filters struct {
-	R       ReplacerFunc
-	Filters FilterMap
+var _ Option = (Filters)(nil)
+
+// option implements `Option` interface
+func (m Filters) option(t *Template) {
+	if t.filters == nil {
+		t.filters = Filters{}
+	}
+	for name, filter := range m {
+		t.filters[name] = filter
+	}
 }
 
-func (f *Filters) Replace(dst []byte, macro string) ([]byte, error) {
-	r := f.R
-	if r == nil {
-		r = nopReplace
+// Apply applies the filter `name` to `value` appending to `dst`
+func (m Filters) Apply(dst []byte, value []byte, name string) ([]byte, error) {
+	filter, ok := m[name]
+	if !ok {
+		return nil, &MissingFilterError{name}
 	}
-	for i := 0; 0 <= i && i < len(macro); i++ {
-		if macro[i] == ':' {
-			var err error
-			offset := len(dst)
-			dst, err = r(dst, macro[:i])
-			if err != nil {
-				return dst[:offset], err
-			}
-			value := dst[offset:]
+	dst, err := filter(dst, value)
+	if err != nil {
+		return nil, err
+	}
+	return dst, nil
+}
 
-			for i++; 0 <= i && i < len(macro); i++ {
-				name := macro[i:]
-				if j := strings.IndexByte(name, ':'); 0 <= j && j < len(name) {
-					name = name[:j]
-				}
-				i += len(name)
-				filter := f.Filters[name]
-				if filter == nil {
-					return dst, fmt.Errorf("Missing macro filter %s", name)
-				}
-				j := len(dst)
-				dst, err = filter(dst, value)
-				if err != nil {
-					return dst[:offset], err
-				}
-				value = dst[j:]
-			}
-			return append(dst[:offset], value...), nil
-		}
-	}
-	return r(dst, macro)
+// MissingFilterError is an error for missing macro filter
+type MissingFilterError struct {
+	filter string
+}
+
+func (m *MissingFilterError) Error() string {
+	return "Missing macro filter " + m.filter
 }

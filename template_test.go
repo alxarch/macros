@@ -1,41 +1,39 @@
 package macros
 
 import (
-	"bytes"
-	"errors"
 	"testing"
 )
 
 func TestTemplate(t *testing.T) {
-	tpl := NewTemplate("${FOO}", "${", "}")
-	if tpl == nil {
-		t.Errorf("Nil template")
-	}
-	if len(tpl.chunks) != len(tpl.macros) {
-		t.Errorf("Invalid chunks: %d", len(tpl.chunks))
-		return
+	tpl, err := New("${FOO}")
+	if err != nil {
+		t.Errorf("Unexpected error")
 	}
 	if len(tpl.tail) != 0 {
 		t.Errorf("Invalid tail: %s", tpl.tail)
 		return
 
 	}
-	buf := bytes.NewBuffer(nil)
-	n, err := tpl.ExecuteBuffer(buf, ReplacerFunc(func(dst []byte, macro string) ([]byte, error) {
-		if macro == "FOO" {
-			return append(dst, "foo"...), nil
-		}
-		return dst, errors.New("Invalid macro")
-	}), nil)
+	if size := tpl.EstimateSize(42); size != 42 {
+		t.Errorf("Invalid size estimation: %d", size)
+	}
+
+	d := tpl.Delimiters()
+	if token := d.AppendToken(nil, "foo"); string(token) != "${foo}" {
+		t.Errorf("Invalid token %q", string(token))
+	}
+	buf, err := tpl.AppendTo(nil)
+	if err != ErrMacroNotFound {
+		t.Errorf("Invalid error %s", err)
+	}
+	buf, err = tpl.AppendTo(nil, Bind("FOO", String("bar")))
+
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	if int64(buf.Len()) != n {
-		t.Errorf("Invalid size: %d", n)
-	}
-	if buf.String() != "foo" {
-		t.Errorf("Invalid result: %s", buf.String())
+	if string(buf) != "bar" {
+		t.Errorf("Invalid buf: %q", buf)
 	}
 }
 
@@ -44,7 +42,8 @@ func TestURLTemplate(t *testing.T) {
 		"foo": "FOO",
 		"bar": "BAR",
 	}
-	tpl, err := URLTemplate("http://example.org/foo/bar?foo=bar&bar=baz&baz=foo", "${", "}", params)
+	delim := DefaultDelimiters()
+	tpl, err := delim.URL("http://example.org/foo/bar?foo=bar&bar=baz&baz=foo", params)
 	if err != nil {
 		t.Fatal(err)
 	}
