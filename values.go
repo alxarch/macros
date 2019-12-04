@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 )
 
 type valueType uint
@@ -15,7 +16,7 @@ type Value struct {
 	str   string
 	num   uint64
 	typ   valueType
-	any   ValueAppender
+	any   interface{}
 }
 
 const (
@@ -25,6 +26,7 @@ const (
 	typeInt
 	typeUint
 	typeAny
+	typeTime
 )
 
 // String creates a new value replacing `macro` with a string
@@ -100,6 +102,16 @@ func Int8(macro Token, i int8) Value {
 	return Value{macro, "", uint64(int64(i)), typeInt, nil}
 }
 
+// Unix crates a new value that replaces `macro` with the unix timestamp of `tm`
+func Unix(macro Token, tm time.Time) Value {
+	return Value{macro, "", uint64(tm.Unix()), typeInt, nil}
+}
+
+// Time creates a new value that replaces `macro` with `tm` formatted according to `layout`
+func Time(macro Token, tm time.Time, layout string) Value {
+	return Value{macro, layout, 0, typeTime, tm}
+}
+
 // Any creates a new value that replaces `macro` with any value
 func Any(macro Token, x interface{}) Value {
 	if any, ok := x.(ValueAppender); ok {
@@ -108,8 +120,17 @@ func Any(macro Token, x interface{}) Value {
 	return Value{macro, "", 0, typeAny, any{x}}
 }
 
-// Custom creates a new value that replaces `macro` with any value
-func Custom(macro Token, v ValueAppender) Value {
+// type TimeValue struct {
+// 	time.Time
+// 	Layout string
+// }
+
+// func (v TimeValue) AppendValue(buf []byte) ([]byte, error) {
+// 	return v.Time.AppendFormat(buf, v.Layout), nil
+// }
+
+// Bind creates a new value that replaces `macro` with any value
+func Bind(macro Token, v ValueAppender) Value {
 	return Value{macro, "", 0, typeAny, v}
 }
 
@@ -125,8 +146,13 @@ func (v *Value) AppendValue(buf []byte) ([]byte, error) {
 		return strconv.AppendUint(buf, v.num, 10), nil
 	case typeInt:
 		return strconv.AppendInt(buf, int64(v.num), 10), nil
+	case typeTime:
+		return v.any.(time.Time).AppendFormat(buf, v.str), nil
 	case typeAny:
-		return v.any.AppendValue(buf)
+		if v, ok := v.any.(ValueAppender); ok {
+			return v.AppendValue(buf)
+		}
+		return any{v.any}.AppendValue(buf)
 	case typeNone:
 		return buf, ErrMacroNotFound
 	default:

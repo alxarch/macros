@@ -1,8 +1,8 @@
 package macros
 
 import (
-	"strconv"
 	"testing"
+	"time"
 )
 
 func TestFields(t *testing.T) {
@@ -82,22 +82,29 @@ func TestFields(t *testing.T) {
 
 }
 
-type Float64Value float64
-
-func (v Float64Value) AppendValue(buf []byte) ([]byte, error) {
-	return strconv.AppendFloat(buf, float64(v), 'f', -1, 64), nil
-}
-
 func BenchmarkInterfaceAlloc(b *testing.B) {
-	b.ReportAllocs()
+	p, _ := NewParser()
+	tpl := "${foo} ${bar}"
 	var buf []byte
 	var err error
+	b.ReportAllocs()
+	now := time.Now()
 	for i := 0; i < b.N; i++ {
-		v := Any("foo", Float64Value(42.0))
-		buf, err = v.AppendValue(buf[:0])
+		buf, err = p.AppendReplace(buf[:0], tpl,
+			String("foo", "bar"),
+			Bool("bar", true),
+			// Bind("zap", Float64Value(42.0)),
+			// Bind("zap", TimeValue{now, time.RFC3339Nano}),
+			Time("ts", now, time.RFC3339Nano),
+		)
 		if err != nil {
 			b.Error(err)
 			return
+		}
+		if string(buf) != "bar true" {
+			b.Errorf("Invalid replace %q", buf)
+			return
+
 		}
 	}
 
