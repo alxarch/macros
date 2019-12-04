@@ -5,7 +5,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	p := NewParser()
+	p, _ := NewParser()
 	for _, src := range []string{
 		"",
 		"${FOO}",
@@ -18,7 +18,7 @@ func TestNew(t *testing.T) {
 			t.Errorf("[%s] Failed to parse: %s", src, err)
 			continue
 		}
-		if s := p.Render(tpl); s != src {
+		if s := tpl.String(); s != src {
 			t.Errorf("[%s] Invalid template: %q", src, s)
 
 		}
@@ -26,7 +26,7 @@ func TestNew(t *testing.T) {
 	}
 }
 func TestTemplate(t *testing.T) {
-	p := NewParser()
+	p, _ := NewParser()
 	s := "${FOO}"
 	tpl, err := p.Parse(s)
 	if err != nil {
@@ -49,7 +49,7 @@ func TestTemplate(t *testing.T) {
 	if err != ErrMacroNotFound {
 		t.Errorf("Invalid error %s", err)
 	}
-	buf, err = p.AppendTemplate(nil, tpl, String("FOO", "bar"))
+	buf, err = tpl.AppendReplace(nil, String("FOO", "bar"))
 
 	if err != nil {
 		t.Error(err)

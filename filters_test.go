@@ -31,7 +31,7 @@ func TestHex(t *testing.T) {
 }
 
 func TestFilters(t *testing.T) {
-	p := NewParser(Filters{
+	p, _ := NewParser(Filters{
 		"hex": Hex,
 	})
 	buf, err := p.AppendReplace(nil, "${foo:hex}", String("foo", "\x00\xff"))

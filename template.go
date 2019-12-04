@@ -1,6 +1,7 @@
 package macros
 
 import (
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -8,6 +9,23 @@ import (
 
 // Template is a compiled template
 type Template struct {
+	parsed
+	p *Parser
+}
+
+// Parser returns the parser that parsed the template
+func (t *Template) Parser() *Parser {
+	return t.p
+}
+
+// String renders a template
+func (t *Template) String() string {
+	var w strings.Builder
+	t.p.render(&w, t.parsed)
+	return w.String()
+}
+
+type parsed struct {
 	chunks []chunk
 	tail   string
 }
@@ -19,8 +37,7 @@ type chunk struct {
 
 // Must creates a new templates or panics if there were any errors
 func Must(tpl string, options ...Option) *Template {
-	p := NewParser(options...)
-	t, err := p.Parse(tpl)
+	t, err := Parse(tpl, options...)
 	if err != nil {
 		panic(err)
 	}
@@ -29,12 +46,15 @@ func Must(tpl string, options ...Option) *Template {
 
 // Parse creates a new template aplying options
 func Parse(tpl string, options ...Option) (*Template, error) {
-	p := NewParser(options...)
+	p, err := NewParser(options...)
+	if err != nil {
+		return nil, err
+	}
 	return p.Parse(tpl)
 }
 
 // EstimateSize estimates the rendered buffer size
-func (t *Template) EstimateSize(size int) int {
+func (t *parsed) EstimateSize(size int) int {
 	size *= len(t.chunks)
 	for i := range t.chunks {
 		chunk := &t.chunks[i]
@@ -42,6 +62,11 @@ func (t *Template) EstimateSize(size int) int {
 	}
 	size += len(t.tail)
 	return size
+}
+
+// AppendReplace appends the template to a buffer replacing tokens with values
+func (t *Template) AppendReplace(buf []byte, values ...Value) ([]byte, error) {
+	return t.p.appendTemplate(buf, t.parsed, values)
 }
 
 // Delimiters returns the template's delimiters
@@ -73,8 +98,17 @@ func (d *Delimiters) AppendToken(dst []byte, token Token) []byte {
 
 var _ Option = Delimiters{}
 
-func (d Delimiters) option(p *Parser) {
+func (d Delimiters) option(p *Parser) error {
+	d.Start = strings.TrimSpace(d.Start)
+	if d.Start == "" {
+		return fmt.Errorf("Invalid start delimiter")
+	}
+	d.End = strings.TrimSpace(d.End)
+	if d.End == "" {
+		return fmt.Errorf("Invalid end delimiter")
+	}
 	p.delims = d
+	return nil
 }
 
 // Token renders a macro token

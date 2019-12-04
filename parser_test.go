@@ -4,14 +4,14 @@ import "testing"
 
 func TestNewParser(t *testing.T) {
 	{
-		p := NewParser()
+		p, _ := NewParser()
 		if p.Delimiters() != DefaultDelimiters() {
 			t.Errorf("Invalid delimiters for new parser")
 		}
 	}
 	{
 		delims := Delimiters{"{{", "}}"}
-		p := NewParser(delims)
+		p, _ := NewParser(delims)
 		if p.Delimiters() != delims {
 			t.Errorf("Invalid custom delimiters for new parser")
 		}
@@ -20,7 +20,7 @@ func TestNewParser(t *testing.T) {
 			t.Errorf("Invalid replacement %q", buf)
 		}
 		tpl, _ := p.Parse("{{ FOO }} {{BAR }} ")
-		if s := p.Render(tpl); s != "{{FOO}} {{BAR}} " {
+		if s := tpl.String(); s != "{{FOO}} {{BAR}} " {
 			t.Errorf("Invalid parse %q", s)
 
 		}

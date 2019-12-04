@@ -3,6 +3,7 @@ package macros
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 )
 
@@ -50,13 +51,17 @@ type Filters map[string]Filter
 var _ Option = (Filters)(nil)
 
 // option implements `Option` interface
-func (m Filters) option(p *Parser) {
+func (m Filters) option(p *Parser) error {
 	if p.filters == nil {
 		p.filters = Filters{}
 	}
 	for name, filter := range m {
+		if filter == nil {
+			return fmt.Errorf("Invalid filter %q", name)
+		}
 		p.filters[name] = filter
 	}
+	return nil
 }
 
 // MissingFilterError is an error for missing macro filter

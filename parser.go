@@ -3,8 +3,6 @@ package macros
 import (
 	"errors"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 )
 
@@ -15,30 +13,32 @@ type Parser struct {
 	none    Value
 	skip    map[Token]struct{}
 	alias   map[Token]Token
-	expand  map[Token]*Template
+	expand  map[Token]parsed
 }
 
 // Option is a parser option
 type Option interface {
-	option(p *Parser)
+	option(p *Parser) error
 }
 
 // NewParser creates a template parser
-func NewParser(options ...Option) *Parser {
+func NewParser(options ...Option) (*Parser, error) {
 	p := Parser{
 		delims: DefaultDelimiters(),
 	}
 	for _, opt := range options {
-		opt.option(&p)
+		if err := opt.option(&p); err != nil {
+			return nil, err
+		}
 	}
-	return &p
+	return &p, nil
 }
 
 // Parse compiles a new template
 func (p *Parser) Parse(s string) (*Template, error) {
 	var (
 		token Token
-		t     Template
+		t     parsed
 		err   error
 	)
 	for len(s) > 0 {
@@ -51,8 +51,12 @@ func (p *Parser) Parse(s string) (*Template, error) {
 			}
 			macro, filters := token.split()
 			macro = p.macroAlias(macro)
-			if exp := p.expand[macro]; exp != nil {
-				s = prefix + p.Render(exp) + s
+			if exp, ok := p.expand[macro]; ok {
+				var w strings.Builder
+				w.WriteString(prefix)
+				p.render(&w, exp)
+				w.WriteString(s)
+				s = w.String()
 				continue
 			}
 			if filters == "" {
@@ -66,10 +70,10 @@ func (p *Parser) Parse(s string) (*Template, error) {
 			})
 		} else {
 			t.tail = s
-			return &t, nil
+			return &Template{t, p}, nil
 		}
 	}
-	return &t, nil
+	return &Template{t, p}, nil
 }
 
 // Alias returns an alias for a token
@@ -89,13 +93,13 @@ func (p *Parser) macroAlias(macro Token) Token {
 	return macro
 }
 
-func (p *Parser) render(w *strings.Builder, t *Template) {
+func (p *Parser) render(w *strings.Builder, t parsed) {
 	for i := range t.chunks {
 		chunk := &t.chunks[i]
 		w.WriteString(chunk.prefix)
 		macro, filters := chunk.token.split()
 		macro = p.macroAlias(macro)
-		if exp := p.expand[macro]; exp != nil {
+		if exp, ok := p.expand[macro]; ok {
 			p.render(w, exp)
 		} else {
 			w.WriteString(p.delims.Start)
@@ -110,11 +114,19 @@ func (p *Parser) render(w *strings.Builder, t *Template) {
 	w.WriteString(t.tail)
 }
 
-// Render renders a template
-func (p *Parser) Render(t *Template) string {
-	var w strings.Builder
-	p.render(&w, t)
-	return w.String()
+func (p *Parser) appendTemplate(buf []byte, t parsed, values []Value) ([]byte, error) {
+	var (
+		err      error
+		original = buf[:]
+	)
+	for i := range t.chunks {
+		chunk := &t.chunks[i]
+		buf = append(buf, chunk.prefix...)
+		if buf, err = p.replaceToken(buf, chunk.token, values); err != nil {
+			return original, err
+		}
+	}
+	return append(buf, t.tail...), nil
 }
 
 // AppendReplace appends the template to a buffer replacing tokens with values
@@ -139,22 +151,6 @@ func (p *Parser) AppendReplace(buf []byte, tpl string, values ...Value) ([]byte,
 		}
 	}
 	return buf, nil
-}
-
-// AppendTemplate appends the template to a buffer replacing tokens with values
-func (p *Parser) AppendTemplate(buf []byte, tpl *Template, values ...Value) ([]byte, error) {
-	var (
-		err      error
-		original = buf[:]
-	)
-	for i := range tpl.chunks {
-		chunk := &tpl.chunks[i]
-		buf = append(buf, chunk.prefix...)
-		if buf, err = p.replaceToken(buf, chunk.token, values); err != nil {
-			return original, err
-		}
-	}
-	return append(buf, tpl.tail...), nil
 }
 
 func unmatchedDelimiterError(d string, pos int) error {
@@ -215,53 +211,37 @@ func (p *Parser) replace(buf []byte, macro Token, values []Value) ([]byte, error
 	for i := range values {
 		v = &values[i]
 		if v.macro == macro {
-			goto appendValue
+			return v.AppendValue(buf)
 		}
 	}
-	v = &p.none
-appendValue:
-	switch v.typ {
-	case fieldTypeTemplate:
-		return p.AppendTemplate(buf, v.any.(*Template), values...)
-	case fieldTypeString:
-		return append(buf, v.str...), nil
-	case fieldTypeFloat:
-		f := math.Float64frombits(v.num)
-		return strconv.AppendFloat(buf, f, 'f', -1, 64), nil
-	case fieldTypeUint:
-		return strconv.AppendUint(buf, v.num, 10), nil
-	case fieldTypeInt:
-		return strconv.AppendInt(buf, int64(v.num), 10), nil
-	case fieldTypeAny:
-		return appendAny(buf, v.any)
-	case fieldTypeNone:
-		return buf, ErrMacroNotFound
-	default:
-		return nil, errors.New("Invalid value type")
-	}
+	return p.none.AppendValue(buf)
 }
 
-type optionFunc func(p *Parser)
+type optionFunc func(p *Parser) error
 
-func (opt optionFunc) option(p *Parser) {
-	opt(p)
-
+func (opt optionFunc) option(p *Parser) error {
+	return opt(p)
 }
 
 // Expand assigns a template to be expanded by a macro
-func Expand(macro Token, tpl *Template) Option {
-	return optionFunc(func(p *Parser) {
+func Expand(macro Token, s string) Option {
+	return optionFunc(func(p *Parser) error {
 		if p.expand == nil {
-			p.expand = make(map[Token]*Template)
+			p.expand = make(map[Token]parsed)
 		}
 		macro, _ = macro.split()
-		p.expand[macro] = tpl
+		tpl, err := p.Parse(s)
+		if err != nil {
+			return err
+		}
+		p.expand[macro] = tpl.parsed
+		return nil
 	})
 }
 
 // Alias defines aliases for a macro
 func Alias(macro Token, aliases ...Token) Option {
-	return optionFunc(func(p *Parser) {
+	return optionFunc(func(p *Parser) error {
 		if p.alias == nil {
 			p.alias = make(map[Token]Token)
 		}
@@ -270,69 +250,29 @@ func Alias(macro Token, aliases ...Token) Option {
 			alias, _ = alias.split()
 			p.alias[macro] = alias
 		}
+		return nil
 	})
 }
 
 // DefaultValue sets a value to be used when a macro has no value
 func DefaultValue(value string) Option {
-	return optionFunc(func(p *Parser) {
+	return optionFunc(func(p *Parser) error {
 		p.none = String("", value)
+		return nil
 	})
 
 }
 
 // Skip defines tokens that will not be replaced
 func Skip(tokens ...Token) Option {
-	return optionFunc(func(p *Parser) {
+	return optionFunc(func(p *Parser) error {
 		if p.skip == nil {
 			p.skip = make(map[Token]struct{}, len(tokens))
 		}
 		for _, token := range tokens {
 			p.skip[token] = struct{}{}
 		}
+		return nil
 	})
 
-}
-
-func appendAny(buf []byte, v interface{}) ([]byte, error) {
-	switch v := v.(type) {
-	case string:
-		return append(buf, v...), nil
-	case []byte:
-		return append(buf, v...), nil
-	case int:
-		return strconv.AppendInt(buf, int64(v), 10), nil
-	case int64:
-		return strconv.AppendInt(buf, int64(v), 10), nil
-	case int32:
-		return strconv.AppendInt(buf, int64(v), 10), nil
-	case int16:
-		return strconv.AppendInt(buf, int64(v), 10), nil
-	case int8:
-		return strconv.AppendInt(buf, int64(v), 10), nil
-	case uint:
-		return strconv.AppendUint(buf, uint64(v), 10), nil
-	case uint64:
-		return strconv.AppendUint(buf, uint64(v), 10), nil
-	case uint32:
-		return strconv.AppendUint(buf, uint64(v), 10), nil
-	case uint16:
-		return strconv.AppendUint(buf, uint64(v), 10), nil
-	case uint8:
-		return strconv.AppendUint(buf, uint64(v), 10), nil
-	case float64:
-		return strconv.AppendFloat(buf, float64(v), 'f', -1, 64), nil
-	case float32:
-		return strconv.AppendFloat(buf, float64(v), 'f', -1, 32), nil
-	case bool:
-		if v {
-			return append(buf, "true"...), nil
-		}
-		return append(buf, "false"...), nil
-	case fmt.Stringer:
-		return append(buf, v.String()...), nil
-	default:
-		s := fmt.Sprintf("%s", v)
-		return append(buf, s...), nil
-	}
 }
