@@ -3,17 +3,25 @@ package macros
 import "testing"
 
 func TestFields(t *testing.T) {
-	values := MacroValues{
-		Bind("foo", String("bar")),
-		Bind("bar", Float(4.2)),
-		Bind("answer", Int(-42)),
-		Bind("answer+", Uint(42)),
-		Bind("ok", Bool(true)),
-		Bind("not", Bool(false)),
+	p := NewParser()
+	values := []Value{
+		String("foo", "bar"),
+		Float("bar", 4.2),
+		Int("answer", -42),
+		Uint("answer+", 42),
+		Bool("ok", true),
+		Bool("not", false),
 	}
 	{
-		tpl := Must("${foo}")
-		buf, err := tpl.AppendTo(nil, values...)
+		buf, err := p.AppendReplace(nil, "${foo} ${bar}", values...)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		} else if string(buf) != "bar 4.2" {
+			t.Errorf("Invalid replacement %q", buf)
+		}
+	}
+	{
+		buf, err := p.AppendReplace(nil, "${foo}", values...)
 		if err != nil {
 			t.Errorf("Unexpected error %s", err)
 		} else if string(buf) != "bar" {
@@ -21,8 +29,7 @@ func TestFields(t *testing.T) {
 		}
 	}
 	{
-		tpl := Must("${bar}")
-		buf, err := tpl.AppendTo(nil, values...)
+		buf, err := p.AppendReplace(nil, "${bar}", values...)
 		if err != nil {
 			t.Errorf("Unexpected error %s", err)
 		} else if string(buf) != "4.2" {
@@ -30,8 +37,7 @@ func TestFields(t *testing.T) {
 		}
 	}
 	{
-		tpl := Must("${answer}")
-		buf, err := tpl.AppendTo(nil, values...)
+		buf, err := p.AppendReplace(nil, "${answer}", values...)
 		if err != nil {
 			t.Errorf("Unexpected error %s", err)
 		} else if string(buf) != "-42" {
@@ -39,8 +45,7 @@ func TestFields(t *testing.T) {
 		}
 	}
 	{
-		tpl := Must("${answer+}")
-		buf, err := tpl.AppendTo(nil, values...)
+		buf, err := p.AppendReplace(nil, "${answer+}", values...)
 		if err != nil {
 			t.Errorf("Unexpected error %s", err)
 		} else if string(buf) != "42" {
@@ -48,8 +53,7 @@ func TestFields(t *testing.T) {
 		}
 	}
 	{
-		tpl := Must("${ok}")
-		buf, err := tpl.AppendTo(nil, values...)
+		buf, err := p.AppendReplace(nil, "${ok}", values...)
 		if err != nil {
 			t.Errorf("Unexpected error %s", err)
 		} else if string(buf) != "true" {
@@ -57,8 +61,7 @@ func TestFields(t *testing.T) {
 		}
 	}
 	{
-		tpl := Must("${not}")
-		buf, err := tpl.AppendTo(nil, values...)
+		buf, err := p.AppendReplace(nil, "${not}", values...)
 		if err != nil {
 			t.Errorf("Unexpected error %s", err)
 		} else if string(buf) != "false" {
@@ -66,8 +69,7 @@ func TestFields(t *testing.T) {
 		}
 	}
 	{
-		tpl := Must("${bax}")
-		buf, err := tpl.AppendTo(nil, values...)
+		buf, err := p.AppendReplace(nil, "${bax}", values...)
 		if err != ErrMacroNotFound {
 			t.Errorf("Unexpected error %s", err)
 		} else if buf != nil {

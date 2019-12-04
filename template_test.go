@@ -4,8 +4,31 @@ import (
 	"testing"
 )
 
+func TestNew(t *testing.T) {
+	p := NewParser()
+	for _, src := range []string{
+		"",
+		"${FOO}",
+		"${FOO} ${BAR}",
+		"${} ${BAR}",
+		"  ${FOO} ${BAR} ",
+	} {
+		tpl, err := p.Parse(src)
+		if err != nil {
+			t.Errorf("[%s] Failed to parse: %s", src, err)
+			continue
+		}
+		if s := p.Render(tpl); s != src {
+			t.Errorf("[%s] Invalid template: %q", src, s)
+
+		}
+
+	}
+}
 func TestTemplate(t *testing.T) {
-	tpl, err := New("${FOO}")
+	p := NewParser()
+	s := "${FOO}"
+	tpl, err := p.Parse(s)
 	if err != nil {
 		t.Errorf("Unexpected error")
 	}
@@ -18,15 +41,15 @@ func TestTemplate(t *testing.T) {
 		t.Errorf("Invalid size estimation: %d", size)
 	}
 
-	d := tpl.Delimiters()
+	d := p.Delimiters()
 	if token := d.AppendToken(nil, "foo"); string(token) != "${foo}" {
 		t.Errorf("Invalid token %q", string(token))
 	}
-	buf, err := tpl.AppendTo(nil)
+	buf, err := p.AppendReplace(nil, s)
 	if err != ErrMacroNotFound {
 		t.Errorf("Invalid error %s", err)
 	}
-	buf, err = tpl.AppendTo(nil, Bind("FOO", String("bar")))
+	buf, err = p.AppendTemplate(nil, tpl, String("FOO", "bar"))
 
 	if err != nil {
 		t.Error(err)

@@ -16,26 +16,32 @@ func QueryEscape(dst, value []byte) ([]byte, error) {
 }
 
 // Base64 is a filter converting a value to base64 string
-func Base64(dst, value []byte) ([]byte, error) {
+func Base64(buf, value []byte) ([]byte, error) {
 	size := base64.StdEncoding.EncodedLen(len(value))
-	buf := make([]byte, size)
-	base64.StdEncoding.Encode(buf, value)
-	return append(dst, buf...), nil
+	offset := len(buf)
+	buf = append(buf, make([]byte, size)...)
+	base64.StdEncoding.Encode(buf[offset:], value)
+	return buf, nil
+}
+func growBuffer(buf []byte, size int) []byte {
+	return append(buf, make([]byte, size)...)
 }
 
 // Base64URL is a filter converting a value to base64 string for URLs
-func Base64URL(dst, value []byte) ([]byte, error) {
+func Base64URL(buf, value []byte) ([]byte, error) {
 	size := base64.URLEncoding.EncodedLen(len(value))
-	buf := make([]byte, size)
-	base64.URLEncoding.Encode(buf, value)
-	return append(dst, buf...), nil
+	offset := len(buf)
+	buf = growBuffer(buf, size)
+	base64.URLEncoding.Encode(buf[offset:], value)
+	return buf, nil
 }
 
 // Hex is a filter converting a value to hex string
-func Hex(dst, value []byte) ([]byte, error) {
-	buf := make([]byte, 2*len(value))
-	hex.Encode(buf, value)
-	return append(dst, buf...), nil
+func Hex(buf, value []byte) ([]byte, error) {
+	offset := len(buf)
+	buf = growBuffer(buf, 2*len(value))
+	hex.Encode(buf[offset:], value)
+	return buf, nil
 }
 
 // Filters is a series of filters to apply to replacements
@@ -44,26 +50,13 @@ type Filters map[string]Filter
 var _ Option = (Filters)(nil)
 
 // option implements `Option` interface
-func (m Filters) option(t *Template) {
-	if t.filters == nil {
-		t.filters = Filters{}
+func (m Filters) option(p *Parser) {
+	if p.filters == nil {
+		p.filters = Filters{}
 	}
 	for name, filter := range m {
-		t.filters[name] = filter
+		p.filters[name] = filter
 	}
-}
-
-// Apply applies the filter `name` to `value` appending to `dst`
-func (m Filters) Apply(dst []byte, value []byte, name string) ([]byte, error) {
-	filter, ok := m[name]
-	if !ok {
-		return nil, &MissingFilterError{name}
-	}
-	dst, err := filter(dst, value)
-	if err != nil {
-		return nil, err
-	}
-	return dst, nil
 }
 
 // MissingFilterError is an error for missing macro filter

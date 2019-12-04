@@ -13,21 +13,8 @@ type MacroReplacer interface {
 	ReplaceMacro(macro string) Value
 }
 
-// MacroValues is a list of values bound to a macro
-type MacroValues []MacroValue
-
 // ErrMacroNotFound is the error to return when a macro is not found
 var ErrMacroNotFound = errors.New("Macro not found")
-
-// ReplaceMacro implements `MacroReplacer` interface
-func (values MacroValues) ReplaceMacro(macro string) Value {
-	for i := range values {
-		if values[i].macro == macro {
-			return values[i].Value
-		}
-	}
-	return None()
-}
 
 // MacroReplacerFunc is a closure implementing `MacroReplacer` interface
 type MacroReplacerFunc func(macro string) Value
@@ -46,127 +33,92 @@ const (
 	fieldTypeInt
 	fieldTypeUint
 	fieldTypeAny
+	fieldTypeTemplate
 )
 
 // Value is a value replacement for a macro
 type Value struct {
-	str string
-	num uint64
-	typ fieldType
-	any interface{}
-}
-
-// MacroValue is a value replacement bound to a macro token
-type MacroValue struct {
-	macro string
-	Value
-}
-
-// IsNone checks if a value is None value
-func (v *Value) IsNone() bool {
-	return v.typ == fieldTypeNone
+	macro Token
+	str   string
+	num   uint64
+	typ   fieldType
+	any   interface{}
 }
 
 // String creates a new MacroValue field for a string value
-func String(s string) Value {
-	return Value{s, 0, fieldTypeString, nil}
+func String(macro Token, s string) Value {
+	return Value{macro, s, 0, fieldTypeString, nil}
 }
 
 // Bool creates a new MacroValue field for a bool value
-func Bool(v bool) Value {
+func Bool(macro Token, v bool) Value {
 	if v {
-		return Value{"true", 0, fieldTypeString, nil}
+		return Value{macro, "true", 0, fieldTypeString, nil}
 	}
-	return Value{"false", 0, fieldTypeString, nil}
+	return Value{macro, "false", 0, fieldTypeString, nil}
 }
 
 // Float creates a new MacroValue field for a float value
-func Float(f float64) Value {
-	return Value{"", math.Float64bits(f), fieldTypeFloat, nil}
+func Float(macro Token, f float64) Value {
+	return Value{macro, "", math.Float64bits(f), fieldTypeFloat, nil}
 }
 
 // Uint creates a new MacroValue field for a uint value
-func Uint(u uint) Value {
-	return Value{"", uint64(u), fieldTypeUint, nil}
+func Uint(macro Token, u uint) Value {
+	return Value{macro, "", uint64(u), fieldTypeUint, nil}
 }
 
 // Uint64 creates a new MacroValue field for a uint64 value
-func Uint64(u uint64) Value {
-	return Value{"", u, fieldTypeUint, nil}
+func Uint64(macro Token, u uint64) Value {
+	return Value{macro, "", u, fieldTypeUint, nil}
 }
 
 // Uint32 creates a new MacroValue field for a uint64 value
-func Uint32(u uint32) Value {
-	return Value{"", uint64(u), fieldTypeUint, nil}
+func Uint32(macro Token, u uint32) Value {
+	return Value{macro, "", uint64(u), fieldTypeUint, nil}
 }
 
 // Uint16 creates a new MacroValue field for a uint64 value
-func Uint16(u uint16) Value {
-	return Value{"", uint64(u), fieldTypeUint, nil}
+func Uint16(macro Token, u uint16) Value {
+	return Value{macro, "", uint64(u), fieldTypeUint, nil}
 }
 
 // Uint8 creates a new MacroValue field for a uint64 value
-func Uint8(u uint8) Value {
-	return Value{"", uint64(u), fieldTypeUint, nil}
+func Uint8(macro Token, u uint8) Value {
+	return Value{macro, "", uint64(u), fieldTypeUint, nil}
 }
 
 // Int creates a new MacroValue field for an int value
-func Int(i int) Value {
-	return Value{"", uint64(int64(i)), fieldTypeInt, nil}
+func Int(macro Token, i int) Value {
+	return Value{macro, "", uint64(int64(i)), fieldTypeInt, nil}
 }
 
 // Int64 creates a new MacroValue field for a uint64 value
-func Int64(i int64) Value {
-	return Value{"", uint64(i), fieldTypeInt, nil}
+func Int64(macro Token, i int64) Value {
+	return Value{macro, "", uint64(i), fieldTypeInt, nil}
 }
 
 // Int32 creates a new MacroValue field for a uint64 value
-func Int32(i int32) Value {
-	return Value{"", uint64(int64(i)), fieldTypeInt, nil}
+func Int32(macro Token, i int32) Value {
+	return Value{macro, "", uint64(int64(i)), fieldTypeInt, nil}
 }
 
 // Int16 creates a new MacroValue field for a uint64 value
-func Int16(i int16) Value {
-	return Value{"", uint64(int64(i)), fieldTypeInt, nil}
+func Int16(macro Token, i int16) Value {
+	return Value{macro, "", uint64(int64(i)), fieldTypeInt, nil}
 }
 
 // Int8 creates a new MacroValue field for a uint64 value
-func Int8(i int8) Value {
-	return Value{"", uint64(int64(i)), fieldTypeInt, nil}
+func Int8(macro Token, i int8) Value {
+	return Value{macro, "", uint64(int64(i)), fieldTypeInt, nil}
 }
 
 // Any creates a new MacroValue field for any value
-func Any(x interface{}) Value {
-	return Value{"", 0, fieldTypeAny, x}
+func Any(macro Token, x interface{}) Value {
+	return Value{macro, "", 0, fieldTypeAny, x}
 }
 
-// None creates a new value for no value found
-func None() Value {
-	return Value{"", 0, fieldTypeNone, nil}
-}
-
-// Values creates a `MacroValues` from various MacroValues
-func Values(values ...MacroValue) MacroValues {
-	return MacroValues(values)
-}
-
-// Bind adds a value binding to a `MacroValues`
-func (values MacroValues) Bind(macro string, value Value) MacroValues {
-	return append(values, MacroValue{macro: macro, Value: value})
-}
-
-// Bind binds a value to a macro token
-func Bind(macro string, value Value) MacroValue {
-	return MacroValue{
-		macro: macro,
-		Value: value,
-	}
-}
-
-// ValueMap is a `MacroReplacer` that maps macros to values
-type ValueMap map[string]Value
-
-// ReplaceMacro implements `MacroReplacer` interface
-func (m ValueMap) ReplaceMacro(macro string) Value {
-	return m[macro]
+// Nested creates a new value that renders a template
+func Nested(macro Token, tpl *Template) Value {
+	return Value{macro, "", 0, fieldTypeTemplate, tpl}
 }

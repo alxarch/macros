@@ -31,14 +31,26 @@ func TestHex(t *testing.T) {
 }
 
 func TestFilters(t *testing.T) {
-	tpl := Must("${foo:hex}", Filters{
+	p := NewParser(Filters{
 		"hex": Hex,
 	})
-	buf, err := tpl.AppendTo(nil, Bind("foo", String("\x00\xff")))
+	buf, err := p.AppendReplace(nil, "${foo:hex}", String("foo", "\x00\xff"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(buf) != "00ff" {
 		t.Errorf("Invalid filter replacement %q", buf)
+	}
+}
+
+func GrowBuf(buf []byte, n int) []byte {
+	return append(buf, make([]byte, n)...)
+}
+func BenchmarkGrowBuf(b *testing.B) {
+	buf := make([]byte, 0, 64)
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		buf = GrowBuf(buf[:0], 32)
+		_ = len(buf)
 	}
 }
