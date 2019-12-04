@@ -14,7 +14,6 @@ type Parser struct {
 	none    Value
 	skip    map[Token]struct{}
 	alias   map[Token]Token
-	expand  map[Token]parsed
 }
 
 // Option is a parser option
@@ -61,14 +60,6 @@ func (p *Parser) Parse(s string) (*Template, error) {
 		}
 		macro, filters := chunk.token.split()
 		macro = p.macroAlias(macro)
-		if exp, ok := p.expand[macro]; ok {
-			var w strings.Builder
-			w.WriteString(chunk.prefix)
-			p.render(&w, exp)
-			w.WriteString(s)
-			s = w.String()
-			continue
-		}
 		if filters == "" {
 			chunk.token = macro
 		} else {
@@ -103,17 +94,13 @@ func (p *Parser) render(w *strings.Builder, t parsed) {
 		w.WriteString(chunk.prefix)
 		macro, filters := chunk.token.split()
 		macro = p.macroAlias(macro)
-		if exp, ok := p.expand[macro]; ok {
-			p.render(w, exp)
-		} else {
-			w.WriteString(start)
-			w.WriteString(string(macro))
-			if filters != "" {
-				w.WriteByte(TokenDelimiter)
-				w.WriteString(string(filters))
-			}
-			w.WriteString(end)
+		w.WriteString(start)
+		w.WriteString(string(macro))
+		if filters != "" {
+			w.WriteByte(TokenDelimiter)
+			w.WriteString(string(filters))
 		}
+		w.WriteString(end)
 	}
 	w.WriteString(t.tail)
 }
@@ -224,21 +211,25 @@ func (p *Parser) replace(buf []byte, macro Token, values []Value) ([]byte, error
 	for i := range values {
 		v = &values[i]
 		if v.macro == macro {
+			if v.typ == typeExpand {
+				return p.AppendReplace(buf, v.str, values...)
+			}
 			return v.AppendValue(buf)
 		}
 	}
 	return p.none.AppendValue(buf)
 }
 
+// FilterMap is maps names to filters
 type FilterMap map[string]Filter
 
 // Filters sets parser filters
 func Filters(filters FilterMap) Option {
 	return func(p *Parser) error {
-		if filters == nil {
-			p.filters = nil
+		if len(filters) == 0 {
 			return nil
 		}
+
 		if p.filters == nil {
 			p.filters = FilterMap{}
 		}
@@ -265,22 +256,6 @@ func Delimiters(start, end string) Option {
 	}
 }
 
-// Expand assigns a template to be expanded by a macro
-func Expand(macro Token, s string) Option {
-	return func(p *Parser) error {
-		if p.expand == nil {
-			p.expand = make(map[Token]parsed)
-		}
-		macro, _ = macro.split()
-		tpl, err := p.Parse(s)
-		if err != nil {
-			return err
-		}
-		p.expand[macro] = tpl.parsed
-		return nil
-	}
-}
-
 // Alias defines aliases for a macro
 func Alias(macro Token, aliases ...Token) Option {
 	return func(p *Parser) error {
@@ -296,7 +271,7 @@ func Alias(macro Token, aliases ...Token) Option {
 	}
 }
 
-// DefaultValue sets a value to be used when a macro has no value
+// DefaultValue sets a value to be used when no macro replacement is found
 func DefaultValue(value string) Option {
 	return func(p *Parser) error {
 		p.none = String("", value)

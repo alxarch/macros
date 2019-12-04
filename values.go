@@ -27,6 +27,8 @@ const (
 	typeUint
 	typeAny
 	typeTime
+	typeExpand
+	typeRewrite
 )
 
 // String creates a new value replacing `macro` with a string
@@ -120,14 +122,10 @@ func Any(macro Token, x interface{}) Value {
 	return Value{macro, "", 0, typeAny, any{x}}
 }
 
-// type TimeValue struct {
-// 	time.Time
-// 	Layout string
-// }
-
-// func (v TimeValue) AppendValue(buf []byte) ([]byte, error) {
-// 	return v.Time.AppendFormat(buf, v.Layout), nil
-// }
+// Expand creates a new value that replaces `macro` by expanding `tpl`
+func Expand(macro Token, tpl string) Value {
+	return Value{macro, tpl, 0, typeExpand, nil}
+}
 
 // Bind creates a new value that replaces `macro` with any value
 func Bind(macro Token, v ValueAppender) Value {

@@ -14,6 +14,7 @@ func TestFields(t *testing.T) {
 		Uint("answer+", 42),
 		Bool("ok", true),
 		Bool("not", false),
+		Expand("baz", "${foo} ${bar}"),
 	}
 	{
 		buf, err := p.AppendReplace(nil, "${foo} ${bar}", values...)
@@ -76,6 +77,14 @@ func TestFields(t *testing.T) {
 		if err != ErrMacroNotFound {
 			t.Errorf("Unexpected error %s", err)
 		} else if buf != nil {
+			t.Errorf("Invalid buf %v", buf)
+		}
+	}
+	{
+		buf, err := p.AppendReplace(nil, "${baz}", values...)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		} else if string(buf) != "bar 4.2" {
 			t.Errorf("Invalid buf %v", buf)
 		}
 	}

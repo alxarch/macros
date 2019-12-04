@@ -71,6 +71,7 @@ func (t *Template) AppendReplace(buf []byte, values ...Value) ([]byte, error) {
 const defaultStartDelimiter = "${"
 const defaultEndDelimiter = "}"
 
+// DefaultDelimiters returns the default delimiters
 func DefaultDelimiters() (string, string) {
 	return defaultStartDelimiter, defaultEndDelimiter
 }
