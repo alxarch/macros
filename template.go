@@ -119,27 +119,36 @@ func (d *Delimiters) URL(rawurl string, params map[string]string) (string, error
 	return u.String(), nil
 }
 
+// TokenDelimiter is the token delimiter for macro and filters
+const TokenDelimiter = ':'
+
+// Token is a macro token with optional filters
 type Token string
 
+// NewToken creates a new macro token
 func NewToken(macro string, filters ...string) Token {
 	return Token(strings.Join(append([]string{macro}, filters...), ":"))
 }
 func (token Token) String() string {
 	return string(token)
 }
+
+// Macro returns the macro part of the token
 func (token Token) Macro() string {
 	m, _ := token.split()
 	return string(m)
 }
+
+// Filters returns the filters of a token
 func (token Token) Filters() []string {
 	if _, filters := token.split(); len(filters) > 0 {
-		return strings.Split(string(filters), string(FilterDelimiter))
+		return strings.Split(string(filters), string(TokenDelimiter))
 	}
 	return nil
 }
 
 func (token Token) split() (Token, Token) {
-	if pos := strings.IndexByte(string(token), FilterDelimiter); 0 <= pos && pos < len(token) {
+	if pos := strings.IndexByte(string(token), TokenDelimiter); 0 <= pos && pos < len(token) {
 		return token[:pos], token[pos+1:]
 	}
 	return token, ""

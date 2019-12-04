@@ -43,7 +43,7 @@ func (p *Parser) Parse(s string) (*Template, error) {
 			prefix, tail := s[:start], s[start:]
 			token, tail := p.parseToken(tail)
 			macro, filters := token.split()
-			macro = p.MacroAlias(macro)
+			macro = p.macroAlias(macro)
 			if exp := p.expand[macro]; exp != nil {
 				s = prefix + p.Render(exp) + tail
 				continue
@@ -66,6 +66,7 @@ func (p *Parser) Parse(s string) (*Template, error) {
 	return &t, nil
 }
 
+// Alias returns an alias for a token
 func (p *Parser) Alias(token Token) Token {
 	macro, _ := token.split()
 	if alias, ok := p.alias[macro]; ok {
@@ -75,28 +76,29 @@ func (p *Parser) Alias(token Token) Token {
 	return token
 }
 
-func (p *Parser) MacroAlias(macro Token) Token {
+func (p *Parser) macroAlias(macro Token) Token {
 	if alias, ok := p.alias[macro]; ok {
 		return alias
 	}
 	return macro
 }
 
-const FilterDelimiter = ':'
+// TokenDelimiter is the token delimiter for macro and filters
+const TokenDelimiter = ':'
 
 func (p *Parser) render(w *strings.Builder, t *Template) {
 	for i := range t.chunks {
 		chunk := &t.chunks[i]
 		w.WriteString(chunk.prefix)
 		macro, filters := chunk.token.split()
-		macro = p.MacroAlias(macro)
+		macro = p.macroAlias(macro)
 		if exp := p.expand[macro]; exp != nil {
 			p.render(w, exp)
 		} else {
 			w.WriteString(p.delims.Start)
 			w.WriteString(string(macro))
 			if filters != "" {
-				w.WriteByte(FilterDelimiter)
+				w.WriteByte(TokenDelimiter)
 				w.WriteString(string(filters))
 			}
 			w.WriteString(p.delims.End)
@@ -232,6 +234,7 @@ func (opt optionFunc) option(p *Parser) {
 
 }
 
+// Expand assigns a template to be expanded by a macro
 func Expand(macro Token, tpl *Template) Option {
 	return optionFunc(func(p *Parser) {
 		if p.expand == nil {
@@ -242,6 +245,7 @@ func Expand(macro Token, tpl *Template) Option {
 	})
 }
 
+// Alias defines aliases for a macro
 func Alias(macro Token, aliases ...Token) Option {
 	return optionFunc(func(p *Parser) {
 		if p.alias == nil {
@@ -255,6 +259,7 @@ func Alias(macro Token, aliases ...Token) Option {
 	})
 }
 
+// DefaultValue sets a value to be used when a macro has no value
 func DefaultValue(value string) Option {
 	return optionFunc(func(p *Parser) {
 		p.none = String("", value)
@@ -262,6 +267,7 @@ func DefaultValue(value string) Option {
 
 }
 
+// Skip defines tokens that will not be replaced
 func Skip(tokens ...Token) Option {
 	return optionFunc(func(p *Parser) {
 		if p.skip == nil {
