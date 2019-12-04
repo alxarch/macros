@@ -41,10 +41,6 @@ func TestTemplate(t *testing.T) {
 		t.Errorf("Invalid size estimation: %d", size)
 	}
 
-	d := p.Delimiters()
-	if token := d.AppendToken(nil, "foo"); string(token) != "${foo}" {
-		t.Errorf("Invalid token %q", string(token))
-	}
 	buf, err := p.AppendReplace(nil, s)
 	if err != ErrMacroNotFound {
 		t.Errorf("Invalid error %s", err)
@@ -61,12 +57,12 @@ func TestTemplate(t *testing.T) {
 }
 
 func TestURLTemplate(t *testing.T) {
-	params := map[string]string{
+	params := map[string]Token{
 		"foo": "FOO",
 		"bar": "BAR",
 	}
-	delim := DefaultDelimiters()
-	tpl, err := delim.URL("http://example.org/foo/bar?foo=bar&bar=baz&baz=foo", params)
+	var p Parser
+	tpl, err := p.URL("http://example.org/foo/bar?foo=bar&bar=baz&baz=foo", params)
 	if err != nil {
 		t.Fatal(err)
 	}

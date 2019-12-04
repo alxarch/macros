@@ -1,7 +1,6 @@
 package macros
 
 import (
-	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -69,62 +68,25 @@ func (t *Template) AppendReplace(buf []byte, values ...Value) ([]byte, error) {
 	return t.p.appendTemplate(buf, t.parsed, values)
 }
 
-// Delimiters returns the template's delimiters
-func (p *Parser) Delimiters() Delimiters {
-	return p.delims
+const defaultStartDelimiter = "${"
+const defaultEndDelimiter = "}"
+
+func DefaultDelimiters() (string, string) {
+	return defaultStartDelimiter, defaultEndDelimiter
 }
 
-// Delimiters are the macro delimiters for templates
-type Delimiters struct {
-	Start string
-	End   string
-}
-
-// DefaultDelimiters returns the default delimiters for new templates
-func DefaultDelimiters() Delimiters {
-	return Delimiters{
-		Start: "${",
-		End:   "}",
-	}
-}
-
-// AppendToken appends a macro token
-func (d *Delimiters) AppendToken(dst []byte, token Token) []byte {
-	dst = append(dst, d.Start...)
-	dst = append(dst, string(token)...)
-	dst = append(dst, d.End...)
-	return dst
-}
-
-var _ Option = Delimiters{}
-
-func (d Delimiters) option(p *Parser) error {
-	d.Start = strings.TrimSpace(d.Start)
-	if d.Start == "" {
-		return fmt.Errorf("Invalid start delimiter")
-	}
-	d.End = strings.TrimSpace(d.End)
-	if d.End == "" {
-		return fmt.Errorf("Invalid end delimiter")
-	}
-	p.delims = d
-	return nil
-}
-
-// Token renders a macro token
-func (d *Delimiters) Token(macro Token) string {
-	return d.Start + string(macro) + d.End
-}
+// var _ Option = Delimiters{}
 
 // URL converts a URL string to a template string with a query
-func (d *Delimiters) URL(rawurl string, params map[string]string) (string, error) {
+func (p *Parser) URL(rawurl string, params map[string]Token) (string, error) {
+	start, end := p.Delimiters()
 	u, err := url.Parse(rawurl)
 	if err != nil {
 		return rawurl, err
 	}
 	q := u.Query()
 	for key, macro := range params {
-		q.Set(key, d.Token(Token(macro)))
+		q.Set(key, start+macro.String()+end)
 	}
 	bs := strings.Builder{}
 	keys := make([]string, 0, len(q))

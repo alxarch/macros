@@ -8,8 +8,9 @@ import (
 
 // Parser is a macro template parser
 type Parser struct {
-	delims  Delimiters
-	filters Filters
+	start   string
+	end     string
+	filters FilterMap
 	none    Value
 	skip    map[Token]struct{}
 	alias   map[Token]Token
@@ -17,61 +18,63 @@ type Parser struct {
 }
 
 // Option is a parser option
-type Option interface {
-	option(p *Parser) error
-}
+type Option func(p *Parser) error
 
-// NewParser creates a template parser
-func NewParser(options ...Option) (*Parser, error) {
-	p := Parser{
-		delims: DefaultDelimiters(),
-	}
-	for _, opt := range options {
-		if err := opt.option(&p); err != nil {
-			return nil, err
+// NewParser creates a new parser applying options
+func NewParser(options ...Option) (p Parser, err error) {
+	for _, option := range options {
+		if err = option(&p); err != nil {
+			return
 		}
 	}
-	return &p, nil
+	return
 }
+
+// Delimiters returns the parser's delimiters
+func (p *Parser) Delimiters() (start string, end string) {
+	start, end = p.start, p.end
+	if start == "" {
+		start = defaultStartDelimiter
+	}
+	if end == "" {
+		end = defaultEndDelimiter
+	}
+	return
+}
+
+var errEOF = errors.New("EOF")
 
 // Parse compiles a new template
 func (p *Parser) Parse(s string) (*Template, error) {
 	var (
-		token Token
 		t     parsed
 		err   error
+		chunk chunk
 	)
 	for len(s) > 0 {
-		start := strings.Index(s, p.delims.Start)
-		if 0 <= start && start < len(s) {
-			prefix, tail := s[:start], s[start:]
-			token, s, err = p.parseToken(tail, start)
-			if err != nil {
-				return nil, err
+		if s, err = p.parseToken(s, &chunk); err != nil {
+			if err == errEOF {
+				t.tail = s
+				return &Template{t, p}, nil
 			}
-			macro, filters := token.split()
-			macro = p.macroAlias(macro)
-			if exp, ok := p.expand[macro]; ok {
-				var w strings.Builder
-				w.WriteString(prefix)
-				p.render(&w, exp)
-				w.WriteString(s)
-				s = w.String()
-				continue
-			}
-			if filters == "" {
-				token = macro
-			} else {
-				token = NewToken(string(macro), filters.Filters()...)
-			}
-			t.chunks = append(t.chunks, chunk{
-				prefix: prefix,
-				token:  token,
-			})
-		} else {
-			t.tail = s
-			return &Template{t, p}, nil
+			return nil, err
 		}
+		macro, filters := chunk.token.split()
+		macro = p.macroAlias(macro)
+		if exp, ok := p.expand[macro]; ok {
+			var w strings.Builder
+			w.WriteString(chunk.prefix)
+			p.render(&w, exp)
+			w.WriteString(s)
+			s = w.String()
+			continue
+		}
+		if filters == "" {
+			chunk.token = macro
+		} else {
+			chunk.token = NewToken(string(macro), filters.Filters()...)
+		}
+		t.chunks = append(t.chunks, chunk)
 	}
 	return &Template{t, p}, nil
 }
@@ -94,6 +97,7 @@ func (p *Parser) macroAlias(macro Token) Token {
 }
 
 func (p *Parser) render(w *strings.Builder, t parsed) {
+	start, end := p.Delimiters()
 	for i := range t.chunks {
 		chunk := &t.chunks[i]
 		w.WriteString(chunk.prefix)
@@ -102,13 +106,13 @@ func (p *Parser) render(w *strings.Builder, t parsed) {
 		if exp, ok := p.expand[macro]; ok {
 			p.render(w, exp)
 		} else {
-			w.WriteString(p.delims.Start)
+			w.WriteString(start)
 			w.WriteString(string(macro))
 			if filters != "" {
 				w.WriteByte(TokenDelimiter)
 				w.WriteString(string(filters))
 			}
-			w.WriteString(p.delims.End)
+			w.WriteString(end)
 		}
 	}
 	w.WriteString(t.tail)
@@ -134,20 +138,18 @@ func (p *Parser) AppendReplace(buf []byte, tpl string, values ...Value) ([]byte,
 	var (
 		err      error
 		original = buf[:]
-		token    Token
+		chunk    chunk
 	)
 	for len(tpl) > 0 {
-		if i := strings.Index(tpl, p.delims.Start); 0 <= i && i < len(tpl) {
-			prefix, tail := tpl[:i], tpl[i:]
-			buf = append(buf, prefix...)
-			if token, tpl, err = p.parseToken(tail, i); err != nil {
-				return original, err
+		if tpl, err = p.parseToken(tpl, &chunk); err != nil {
+			if err == errEOF {
+				return append(buf, tpl...), nil
 			}
-			if buf, err = p.replaceToken(buf, token, values); err != nil {
-				return original, err
-			}
-		} else {
-			return append(buf, tpl...), nil
+			return original, err
+		}
+		buf = append(buf, chunk.prefix...)
+		if buf, err = p.replaceToken(buf, chunk.token, values); err != nil {
+			return original, err
 		}
 	}
 	return buf, nil
@@ -157,25 +159,36 @@ func unmatchedDelimiterError(d string, pos int) error {
 	return fmt.Errorf("Unmatched delimiter %q at position %d", d, pos)
 }
 
-func (p *Parser) parseToken(src string, pos int) (Token, string, error) {
-	if n := len(p.delims.Start); 0 <= n && n < len(src) {
-		src := src[n:]
-		if i := strings.Index(src, p.delims.End); 0 <= i && i <= len(src) {
-			token := src[:i]
-			if strings.Index(token, p.delims.Start) != -1 {
-				return "", src, unmatchedDelimiterError(p.delims.Start, pos)
+func (p *Parser) parseToken(s string, chunk *chunk) (string, error) {
+	start, end := p.Delimiters()
+	if i := strings.Index(s, start); 0 <= i && i < len(s) {
+		var src string
+		chunk.prefix, src = s[:i], s[i:]
+		if n := len(start); 0 <= n && n < len(src) {
+			src := src[n:]
+			if i := strings.Index(src, end); 0 <= i && i <= len(src) {
+				token := src[:i]
+				if strings.Index(token, end) != -1 {
+					return s, unmatchedDelimiterError(start, i)
+				}
+				i += len(end)
+				chunk.token = Token(strings.TrimSpace(token))
+				return src[i:], nil
 			}
-			i += len(p.delims.End)
-			return Token(strings.TrimSpace(token)), src[i:], nil
 		}
+		return s, unmatchedDelimiterError(start, i)
 	}
-	return "", src, unmatchedDelimiterError(p.delims.Start, pos)
+	return s, errEOF
 }
 
 func (p *Parser) replaceToken(buf []byte, token Token, values []Value) ([]byte, error) {
 	macro, filters := token.split()
 	if _, skip := p.skip[macro]; skip {
-		return p.delims.AppendToken(buf, token), nil
+		start, end := p.Delimiters()
+		buf = append(buf, start...)
+		buf = append(buf, string(token)...)
+		buf = append(buf, end...)
+		return buf, nil
 	}
 	offset := len(buf)
 	buf, err := p.replace(buf, macro, values)
@@ -217,15 +230,44 @@ func (p *Parser) replace(buf []byte, macro Token, values []Value) ([]byte, error
 	return p.none.AppendValue(buf)
 }
 
-type optionFunc func(p *Parser) error
+type FilterMap map[string]Filter
 
-func (opt optionFunc) option(p *Parser) error {
-	return opt(p)
+// Filters sets parser filters
+func Filters(filters FilterMap) Option {
+	return func(p *Parser) error {
+		if filters == nil {
+			p.filters = nil
+			return nil
+		}
+		if p.filters == nil {
+			p.filters = FilterMap{}
+		}
+		for name, filter := range filters {
+			p.filters[name] = filter
+		}
+		return nil
+	}
+}
+
+// Delimiters sets parser delimiters
+func Delimiters(start, end string) Option {
+	return func(p *Parser) error {
+		start = strings.TrimSpace(start)
+		if start == "" {
+			return fmt.Errorf("Invalid start delimiter")
+		}
+		end = strings.TrimSpace(end)
+		if end == "" {
+			return fmt.Errorf("Invalid end delimiter")
+		}
+		p.start, p.end = start, end
+		return nil
+	}
 }
 
 // Expand assigns a template to be expanded by a macro
 func Expand(macro Token, s string) Option {
-	return optionFunc(func(p *Parser) error {
+	return func(p *Parser) error {
 		if p.expand == nil {
 			p.expand = make(map[Token]parsed)
 		}
@@ -236,12 +278,12 @@ func Expand(macro Token, s string) Option {
 		}
 		p.expand[macro] = tpl.parsed
 		return nil
-	})
+	}
 }
 
 // Alias defines aliases for a macro
 func Alias(macro Token, aliases ...Token) Option {
-	return optionFunc(func(p *Parser) error {
+	return func(p *Parser) error {
 		if p.alias == nil {
 			p.alias = make(map[Token]Token)
 		}
@@ -251,21 +293,20 @@ func Alias(macro Token, aliases ...Token) Option {
 			p.alias[macro] = alias
 		}
 		return nil
-	})
+	}
 }
 
 // DefaultValue sets a value to be used when a macro has no value
 func DefaultValue(value string) Option {
-	return optionFunc(func(p *Parser) error {
+	return func(p *Parser) error {
 		p.none = String("", value)
 		return nil
-	})
-
+	}
 }
 
 // Skip defines tokens that will not be replaced
 func Skip(tokens ...Token) Option {
-	return optionFunc(func(p *Parser) error {
+	return func(p *Parser) error {
 		if p.skip == nil {
 			p.skip = make(map[Token]struct{}, len(tokens))
 		}
@@ -273,6 +314,6 @@ func Skip(tokens ...Token) Option {
 			p.skip[token] = struct{}{}
 		}
 		return nil
-	})
+	}
 
 }

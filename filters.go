@@ -3,7 +3,6 @@ package macros
 import (
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"net/url"
 )
 
@@ -43,25 +42,6 @@ func Hex(buf, value []byte) ([]byte, error) {
 	buf = growBuffer(buf, 2*len(value))
 	hex.Encode(buf[offset:], value)
 	return buf, nil
-}
-
-// Filters is a series of filters to apply to replacements
-type Filters map[string]Filter
-
-var _ Option = (Filters)(nil)
-
-// option implements `Option` interface
-func (m Filters) option(p *Parser) error {
-	if p.filters == nil {
-		p.filters = Filters{}
-	}
-	for name, filter := range m {
-		if filter == nil {
-			return fmt.Errorf("Invalid filter %q", name)
-		}
-		p.filters[name] = filter
-	}
-	return nil
 }
 
 // MissingFilterError is an error for missing macro filter
