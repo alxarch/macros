@@ -36,16 +36,23 @@ func NewParser(options ...Option) *Parser {
 
 // Parse compiles a new template
 func (p *Parser) Parse(s string) (*Template, error) {
-	t := Template{}
+	var (
+		token Token
+		t     Template
+		err   error
+	)
 	for len(s) > 0 {
 		start := strings.Index(s, p.delims.Start)
 		if 0 <= start && start < len(s) {
 			prefix, tail := s[:start], s[start:]
-			token, tail := p.parseToken(tail)
+			token, s, err = p.parseToken(tail, start)
+			if err != nil {
+				return nil, err
+			}
 			macro, filters := token.split()
 			macro = p.macroAlias(macro)
 			if exp := p.expand[macro]; exp != nil {
-				s = prefix + p.Render(exp) + tail
+				s = prefix + p.Render(exp) + s
 				continue
 			}
 			if filters == "" {
@@ -53,7 +60,6 @@ func (p *Parser) Parse(s string) (*Template, error) {
 			} else {
 				token = NewToken(string(macro), filters.Filters()...)
 			}
-			s = tail
 			t.chunks = append(t.chunks, chunk{
 				prefix: prefix,
 				token:  token,
@@ -82,9 +88,6 @@ func (p *Parser) macroAlias(macro Token) Token {
 	}
 	return macro
 }
-
-// TokenDelimiter is the token delimiter for macro and filters
-const TokenDelimiter = ':'
 
 func (p *Parser) render(w *strings.Builder, t *Template) {
 	for i := range t.chunks {
@@ -119,17 +122,18 @@ func (p *Parser) AppendReplace(buf []byte, tpl string, values ...Value) ([]byte,
 	var (
 		err      error
 		original = buf[:]
+		token    Token
 	)
 	for len(tpl) > 0 {
-		i := strings.Index(tpl, p.delims.Start)
-		if 0 <= i && i < len(tpl) {
+		if i := strings.Index(tpl, p.delims.Start); 0 <= i && i < len(tpl) {
 			prefix, tail := tpl[:i], tpl[i:]
 			buf = append(buf, prefix...)
-			token, tail := p.parseToken(tail)
+			if token, tpl, err = p.parseToken(tail, i); err != nil {
+				return original, err
+			}
 			if buf, err = p.replaceToken(buf, token, values); err != nil {
 				return original, err
 			}
-			tpl = tail
 		} else {
 			return append(buf, tpl...), nil
 		}
@@ -153,16 +157,23 @@ func (p *Parser) AppendTemplate(buf []byte, tpl *Template, values ...Value) ([]b
 	return append(buf, tpl.tail...), nil
 }
 
-func (p *Parser) parseToken(src string) (Token, string) {
+func unmatchedDelimiterError(d string, pos int) error {
+	return fmt.Errorf("Unmatched delimiter %q at position %d", d, pos)
+}
+
+func (p *Parser) parseToken(src string, pos int) (Token, string, error) {
 	if n := len(p.delims.Start); 0 <= n && n < len(src) {
 		src := src[n:]
 		if i := strings.Index(src, p.delims.End); 0 <= i && i <= len(src) {
-			token := Token(strings.TrimSpace(src[:i]))
+			token := src[:i]
+			if strings.Index(token, p.delims.Start) != -1 {
+				return "", src, unmatchedDelimiterError(p.delims.Start, pos)
+			}
 			i += len(p.delims.End)
-			return token, src[i:]
+			return Token(strings.TrimSpace(token)), src[i:], nil
 		}
 	}
-	return "", src
+	return "", src, unmatchedDelimiterError(p.delims.Start, pos)
 }
 
 func (p *Parser) replaceToken(buf []byte, token Token, values []Value) ([]byte, error) {
@@ -195,6 +206,9 @@ func (p *Parser) replaceToken(buf []byte, token Token, values []Value) ([]byte, 
 	}
 	return append(buf[:offset], value...), nil
 }
+
+// ErrMacroNotFound is the error to return when a macro is not found
+var ErrMacroNotFound = errors.New("Macro not found")
 
 func (p *Parser) replace(buf []byte, macro Token, values []Value) ([]byte, error) {
 	var v *Value

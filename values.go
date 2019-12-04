@@ -1,28 +1,8 @@
 package macros
 
 import (
-	"errors"
 	"math"
 )
-
-// MacroReplacer provides a value to replace a macro token.
-//
-// If no replacement value exists for this token a `None()`
-// value should be returned
-type MacroReplacer interface {
-	ReplaceMacro(macro string) Value
-}
-
-// ErrMacroNotFound is the error to return when a macro is not found
-var ErrMacroNotFound = errors.New("Macro not found")
-
-// MacroReplacerFunc is a closure implementing `MacroReplacer` interface
-type MacroReplacerFunc func(macro string) Value
-
-// ReplaceMacro implements `MacroReplacer` interface
-func (f MacroReplacerFunc) ReplaceMacro(macro string) Value {
-	return f(macro)
-}
 
 type fieldType uint
 
