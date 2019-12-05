@@ -41,35 +41,22 @@ func (r *Replacer) Delimiters() (start string, end string) {
 
 var errEOF = errors.New("EOF")
 
-// Parse compiles a new template
-func (r *Replacer) Parse(s string) (t Template, err error) {
-	var chunk chunk
-	for len(s) > 0 {
-		if s, err = r.parseToken(s, &chunk); err != nil {
-			if err == errEOF {
-				t.tail = s
-				err = nil
-			}
-			return
-		}
-		macro, filters := chunk.token.split()
-		macro = r.macroAlias(macro)
-		if filters == "" {
-			chunk.token = macro
-		} else {
-			chunk.token = NewToken(string(macro), filters.Filters()...)
-		}
-		t.chunks = append(t.chunks, chunk)
+// Parse compiles a new template using `r` options
+func (r *Replacer) Parse(s string) (*Template, error) {
+	t := Template{
+		config: *r,
 	}
-	return
+	if err := t.parse(s); err != nil {
+		return nil, err
+	}
+	return &t, nil
 }
 
 // Alias returns an alias for a token
 func (r *Replacer) Alias(token Token) Token {
 	macro, _ := token.split()
 	if alias, ok := r.alias[macro]; ok {
-		filters := token.Filters()
-		return NewToken(string(alias), filters...)
+		return token.alias(alias)
 	}
 	return token
 }
@@ -79,23 +66,6 @@ func (r *Replacer) macroAlias(macro Token) Token {
 		return alias
 	}
 	return macro
-}
-
-// Execute executes a parsed template appending to a buffer
-func (r *Replacer) Execute(buf []byte, t *Template, values ...Value) ([]byte, error) {
-	return r.execute(buf, t, values)
-}
-
-func (r *Replacer) execute(b []byte, t *Template, values []Value) (buf []byte, err error) {
-	buf = b
-	for i := range t.chunks {
-		chunk := &t.chunks[i]
-		buf = append(buf, chunk.prefix...)
-		if buf, err = r.replaceToken(buf, chunk.token, values); err != nil {
-			return b, err
-		}
-	}
-	return append(buf, t.tail...), nil
 }
 
 const minBufferSize = 64
@@ -166,6 +136,7 @@ func (r *Replacer) appendToken(buf []byte, token Token) []byte {
 
 func (r *Replacer) replaceToken(buf []byte, token Token, values []Value) ([]byte, error) {
 	macro, filters := token.split()
+	macro = r.macroAlias(macro)
 	if _, skip := r.skip[macro]; skip {
 		return r.appendToken(buf, token), nil
 	}
@@ -227,24 +198,6 @@ func (filters Filters) apply(r *Replacer) error {
 		r.filters[name] = filter
 	}
 	return nil
-}
-
-func (r *Replacer) render(w *strings.Builder, t *Template) {
-	start, end := r.Delimiters()
-	for i := range t.chunks {
-		chunk := &t.chunks[i]
-		w.WriteString(chunk.prefix)
-		macro, filters := chunk.token.split()
-		macro = r.macroAlias(macro)
-		w.WriteString(start)
-		w.WriteString(string(macro))
-		if filters != "" {
-			w.WriteByte(TokenDelimiter)
-			w.WriteString(string(filters))
-		}
-		w.WriteString(end)
-	}
-	w.WriteString(t.tail)
 }
 
 // URL converts a URL string to a template string with a query

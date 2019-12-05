@@ -41,7 +41,7 @@ func Alias(macro Token, aliases ...Token) Option {
 		macro, _ = macro.split()
 		for _, alias := range aliases {
 			alias, _ = alias.split()
-			p.alias[macro] = alias
+			p.alias[alias] = macro
 		}
 		return nil
 	})

@@ -26,9 +26,8 @@ func TestReplacer(t *testing.T) {
 	}
 }
 func TestTemplate(t *testing.T) {
-	p, _ := New()
 	s := "${FOO}"
-	tpl, err := p.Parse(s)
+	tpl, err := Parse(s)
 	if err != nil {
 		t.Errorf("Unexpected error")
 	}
@@ -41,11 +40,11 @@ func TestTemplate(t *testing.T) {
 		t.Errorf("Invalid size estimation: %d", size)
 	}
 
-	buf, err := p.Replace(nil, s)
+	buf, err := tpl.Replace(nil)
 	if err != ErrMacroNotFound {
 		t.Errorf("Invalid error %s", err)
 	}
-	buf, err = tpl.Execute(nil, String("FOO", "bar"))
+	buf, err = tpl.Replace(nil, String("FOO", "bar"))
 
 	if err != nil {
 		t.Error(err)
