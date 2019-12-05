@@ -16,15 +16,14 @@ type Replacer struct {
 	none    Value
 	skip    map[Token]struct{}
 	alias   map[Token]Token
+	expand  map[Token]string
 }
 
 // New creates a new `Replacer` applying options
-func New(options ...Option) (*Replacer, error) {
+func New(options ...Option) *Replacer {
 	var r Replacer
-	if err := r.applyOptions(options); err != nil {
-		return nil, err
-	}
-	return &r, nil
+	r.applyOptions(options)
+	return &r
 }
 
 // Delimiters returns the Replacer's delimiters
@@ -54,29 +53,25 @@ func (r *Replacer) Parse(s string) (*Template, error) {
 
 // Alias returns an alias for a token
 func (r *Replacer) Alias(token Token) Token {
-	macro, _ := token.split()
-	if alias, ok := r.alias[macro]; ok {
-		return token.alias(alias)
+	if pos := strings.IndexByte(string(token), TokenDelimiter); 0 <= pos && pos < len(token) {
+		macro, filters := token[:pos], token[pos:]
+		if alias, ok := r.alias[macro]; ok {
+			return alias + filters
+		}
+		return token
+	}
+	if alias, ok := r.alias[token]; ok {
+		return alias
 	}
 	return token
 }
 
-func (r *Replacer) macroAlias(macro Token) Token {
-	if alias, ok := r.alias[macro]; ok {
-		return alias
-	}
-	return macro
-}
-
 const minBufferSize = 64
 
-func (r *Replacer) applyOptions(options []Option) error {
+func (r *Replacer) applyOptions(options []Option) {
 	for _, opt := range options {
-		if err := opt.apply(r); err != nil {
-			return err
-		}
+		opt.apply(r)
 	}
-	return nil
 }
 
 // Replace appends the template to a buffer replacing tokens with values
@@ -127,78 +122,70 @@ func (r *Replacer) parseToken(s string, chunk *chunk) (string, error) {
 	return s, errEOF
 }
 
-func (r *Replacer) appendToken(buf []byte, token Token) []byte {
+func (r *Replacer) appendToken(buf []byte, macro, filters Token) []byte {
 	start, end := r.Delimiters()
 	buf = append(buf, start...)
-	buf = append(buf, string(token)...)
+	buf = append(buf, string(macro)...)
+	buf = append(buf, string(filters)...)
 	return append(buf, end...)
 }
 
 func (r *Replacer) replaceToken(buf []byte, token Token, values []Value) ([]byte, error) {
-	macro, filters := token.split()
-	macro = r.macroAlias(macro)
+	var (
+		err            error
+		value          []byte
+		offset         = len(buf)
+		macro, filters = token.split()
+	)
+	if alias, ok := r.alias[macro]; ok {
+		macro = alias
+	}
 	if _, skip := r.skip[macro]; skip {
-		return r.appendToken(buf, token), nil
+		return r.appendToken(buf, macro, filters), nil
 	}
-	offset := len(buf)
-	buf, err := r.replace(buf, macro, values)
-	if err != nil {
-		return buf[:offset], err
+	if exp, ok := r.expand[macro]; ok {
+		buf, err = r.Replace(buf, exp, values...)
+		if err != nil {
+			return buf[:offset], fmt.Errorf("Expand %q failed: %s", macro, err)
+		}
+	} else {
+		var v *Value
+		for i := range values {
+			v = &values[i]
+			if v.macro == macro {
+				goto done
+			}
+		}
+		v = &r.none
+	done:
+		buf, err = v.AppendValue(buf)
+		if err != nil {
+			return buf[:offset], err
+		}
 	}
-	if len(filters) == 0 {
+	if filters == "" {
 		return buf, nil
 	}
-	value := buf[offset:]
-	var name Token
-	for len(filters) > 0 {
-		name, filters = filters.split()
-		filter := r.filters[string(name)]
+	value = buf[offset:]
+	for len(filters) > 1 {
+		filters = filters[1:]
+		macro, filters = filters.split()
+		filter := r.filters[string(macro)]
 		if filter == nil {
-			return buf[:offset], &MissingFilterError{string(name)}
+			return nil, &MissingFilterError{string(macro)}
 		}
 		n := len(buf)
-		buf, err = filter(buf, value)
-		if err != nil {
+		if buf, err = filter(buf, value); err != nil {
 			return buf[:offset], err
 		}
 		value = buf[n:]
 	}
+
 	return append(buf[:offset], value...), nil
 }
 
 // ErrMacroNotFound is the error to return when a macro is not found
 var ErrMacroNotFound = errors.New("Macro not found")
-
-func (r *Replacer) replace(buf []byte, macro Token, values []Value) ([]byte, error) {
-	var v *Value
-	for i := range values {
-		v = &values[i]
-		if v.macro == macro {
-			if v.typ == typeExpand {
-				return r.Replace(buf, v.str, values...)
-			}
-			return v.AppendValue(buf)
-		}
-	}
-	return r.none.AppendValue(buf)
-}
-
-// Filters is maps names to filters
-type Filters map[string]Filter
-
-func (filters Filters) apply(r *Replacer) error {
-	if len(filters) == 0 {
-		return nil
-	}
-
-	if r.filters == nil {
-		r.filters = Filters{}
-	}
-	for name, filter := range filters {
-		r.filters[name] = filter
-	}
-	return nil
-}
 
 // URL converts a URL string to a template string with a query
 func (r *Replacer) URL(rawurl string, params map[string]Token) (string, error) {

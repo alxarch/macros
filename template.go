@@ -1,7 +1,6 @@
 package macros
 
 import (
-	"io"
 	"strings"
 )
 
@@ -20,11 +19,12 @@ func (t *Template) String() string {
 		chunk := &t.chunks[i]
 		w.WriteString(chunk.prefix)
 		macro, filters := chunk.token.split()
-		macro = t.config.macroAlias(macro)
+		if alias, ok := t.config.alias[macro]; ok {
+			macro = alias
+		}
 		w.WriteString(start)
 		w.WriteString(string(macro))
 		if filters != "" {
-			w.WriteByte(TokenDelimiter)
 			w.WriteString(string(filters))
 		}
 		w.WriteString(end)
@@ -50,9 +50,7 @@ func Must(tpl string, options ...Option) *Template {
 // Parse creates a new template aplying options
 func Parse(tpl string, options ...Option) (*Template, error) {
 	t := Template{}
-	if err := t.config.applyOptions(options); err != nil {
-		return nil, err
-	}
+	t.config.applyOptions(options)
 	if err := t.parse(tpl); err != nil {
 		return nil, err
 	}
@@ -83,33 +81,33 @@ func (t *Template) Replace(b []byte, values ...Value) (buf []byte, err error) {
 	return append(buf, t.tail...), nil
 }
 
-// Execute writes a template to `w` replacing macros with `values` using `buffer` as scratch space.
-func (t *Template) Execute(w io.Writer, buffer []byte, values ...Value) (n int64, err error) {
-	if buffer == nil {
-		buffer = make([]byte, minBufferSize)
-	}
-	var nn int
-	for i := range t.chunks {
-		chunk := &t.chunks[i]
-		nn, err = w.Write(s2b(chunk.prefix))
-		n += int64(nn)
-		if err != nil {
-			return
-		}
+// // Execute writes a template to `w` replacing macros with `values` using `buffer` as scratch space.
+// func (t *Template) Execute(w io.Writer, buffer []byte, values ...Value) (n int64, err error) {
+// 	if buffer == nil {
+// 		buffer = make([]byte, minBufferSize)
+// 	}
+// 	var nn int
+// 	for i := range t.chunks {
+// 		chunk := &t.chunks[i]
+// 		nn, err = w.Write(s2b(chunk.prefix))
+// 		n += int64(nn)
+// 		if err != nil {
+// 			return
+// 		}
 
-		if buffer, err = t.config.replaceToken(buffer[:0], chunk.token, values); err != nil {
-			return
-		}
-		nn, err = w.Write(buffer)
-		n += int64(nn)
-		if err != nil {
-			return
-		}
-	}
-	nn, err = w.Write(s2b(t.tail))
-	n += int64(nn)
-	return
-}
+// 		if buffer, err = t.config.replaceToken(buffer[:0], chunk.token, values); err != nil {
+// 			return
+// 		}
+// 		nn, err = w.Write(buffer)
+// 		n += int64(nn)
+// 		if err != nil {
+// 			return
+// 		}
+// 	}
+// 	nn, err = w.Write(s2b(t.tail))
+// 	n += int64(nn)
+// 	return
+// }
 
 func (t *Template) parse(s string) (err error) {
 	var chunk chunk
@@ -121,13 +119,7 @@ func (t *Template) parse(s string) (err error) {
 			}
 			return
 		}
-		macro, filters := chunk.token.split()
-		macro = t.config.macroAlias(macro)
-		if filters == "" {
-			chunk.token = macro
-		} else {
-			chunk.token = macro + Token(string(TokenDelimiter)) + filters
-		}
+		chunk.token = t.config.Alias(chunk.token)
 		t.chunks = append(t.chunks, chunk)
 	}
 	return

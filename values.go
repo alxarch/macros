@@ -27,8 +27,7 @@ const (
 	typeUint
 	typeAny
 	typeTime
-	typeExpand
-	typeRewrite
+	// typeExpand
 )
 
 // String creates a new value replacing `macro` with a string
@@ -120,11 +119,6 @@ func Any(macro Token, x interface{}) Value {
 		return Value{macro, "", 0, typeAny, any}
 	}
 	return Value{macro, "", 0, typeAny, any{x}}
-}
-
-// Expand creates a new value that replaces `macro` by expanding `tpl`
-func Expand(macro Token, tpl string) Value {
-	return Value{macro, tpl, 0, typeExpand, nil}
 }
 
 // Bind creates a new value that replaces `macro` with any value

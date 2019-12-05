@@ -9,6 +9,22 @@ import (
 // Filter is a converter for values
 type Filter func(dst, value []byte) ([]byte, error)
 
+// Filters is maps names to filters
+type Filters map[string]Filter
+
+func (filters Filters) apply(r *Replacer) {
+	if len(filters) == 0 {
+		return
+	}
+
+	if r.filters == nil {
+		r.filters = Filters{}
+	}
+	for name, filter := range filters {
+		r.filters[name] = filter
+	}
+}
+
 // QueryEscape is a filter escaping a value for URL query strings
 func QueryEscape(dst, value []byte) ([]byte, error) {
 	q := url.QueryEscape(string(value))

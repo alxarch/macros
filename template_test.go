@@ -5,7 +5,7 @@ import (
 )
 
 func TestReplacer(t *testing.T) {
-	p, _ := New()
+	p := New()
 	for _, src := range []string{
 		"",
 		"${FOO}",

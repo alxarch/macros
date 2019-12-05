@@ -6,7 +6,7 @@ import (
 )
 
 func TestFields(t *testing.T) {
-	p, _ := New()
+	p := New(Expand("baz", "${foo} ${bar}"))
 	values := []Value{
 		String("foo", "bar"),
 		Float64("bar", 4.2),
@@ -14,7 +14,6 @@ func TestFields(t *testing.T) {
 		Uint("answer+", 42),
 		Bool("ok", true),
 		Bool("not", false),
-		Expand("baz", "${foo} ${bar}"),
 	}
 	{
 		buf, err := p.Replace(nil, "${foo} ${bar}", values...)
@@ -92,7 +91,7 @@ func TestFields(t *testing.T) {
 }
 
 func BenchmarkInterfaceAlloc(b *testing.B) {
-	p, _ := New()
+	p := New()
 	tpl := "${foo} ${bar}"
 	var buf []byte
 	var err error

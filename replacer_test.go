@@ -6,7 +6,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	p, _ := New(Delimiters("{{", "}}"))
+	p := New(Delimiters("{{", "}}"))
 	buf, _ := p.Replace(nil, "{{FOO}}", String("FOO", "foo"))
 	if string(buf) != "foo" {
 		t.Errorf("Invalid replacement %q", buf)
@@ -18,7 +18,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
-	p, _ := New(Filters{"hex": Hex})
+	p := New(Filters{"hex": Hex})
 	tpl, err := p.Parse("${foo:hex} bar")
 	if err != nil {
 		t.Errorf("Unexpected error %s", err)

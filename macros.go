@@ -1,7 +1,6 @@
 package macros
 
 import (
-	"io"
 	"strings"
 )
 
@@ -9,18 +8,6 @@ import (
 func Replace(buf []byte, tpl string, values ...Value) ([]byte, error) {
 	var r Replacer
 	return r.Replace(buf, tpl, values...)
-}
-
-// FPrintf writes the template `tpl` to an `io.Writer` replacing tokens with values using a blank Replacer
-func FPrintf(w io.Writer, tpl string, values ...Value) (int, error) {
-	var p Printer
-	return p.FPrintf(w, tpl, values...)
-}
-
-// SPrintf writes the template `tpl` to an `io.Writer` replacing tokens with values using a blank Replacer
-func SPrintf(tpl string, values ...Value) (string, error) {
-	var p Printer
-	return p.SPrintf(tpl, values...)
 }
 
 const defaultStartDelimiter = "${"
@@ -39,7 +26,9 @@ type Token string
 
 // NewToken creates a new macro token
 func NewToken(macro string, filters ...string) Token {
-	return Token(strings.Join(append([]string{macro}, filters...), ":"))
+	filters = append([]string{macro}, filters...)
+	d := string(TokenDelimiter)
+	return Token(strings.Join(filters, d))
 }
 func (token Token) String() string {
 	return string(token)
@@ -53,22 +42,15 @@ func (token Token) Macro() string {
 
 // Filters returns the filters of a token
 func (token Token) Filters() []string {
-	if _, filters := token.split(); len(filters) > 0 {
-		return strings.Split(string(filters), string(TokenDelimiter))
+	if _, filters := token.split(); len(filters) > 1 {
+		return strings.Split(string(filters[1:]), string(TokenDelimiter))
 	}
 	return nil
 }
 
-func (token Token) alias(alias Token) Token {
-	if pos := strings.IndexByte(string(token), TokenDelimiter); 0 <= pos && pos < len(token) {
-		return alias + token[pos:]
-	}
-	return alias
-}
-
 func (token Token) split() (Token, Token) {
 	if pos := strings.IndexByte(string(token), TokenDelimiter); 0 <= pos && pos < len(token) {
-		return token[:pos], token[pos+1:]
+		return token[:pos], token[pos:]
 	}
 	return token, ""
 }

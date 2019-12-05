@@ -55,7 +55,7 @@ func TestBase64(t *testing.T) {
 }
 
 func TestFilters(t *testing.T) {
-	p, _ := New(Filters{
+	p := New(Filters{
 		"hex": Hex,
 	})
 	buf, err := p.Replace(nil, "${foo:hex}", String("foo", "\x00\xff"))

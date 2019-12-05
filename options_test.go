@@ -4,10 +4,7 @@ import "testing"
 
 func TestDelimiters(t *testing.T) {
 	{
-		p, err := New(Delimiters("%", "%"))
-		if err != nil {
-			t.Errorf("Unexpected error %s", err)
-		}
+		p := New(Delimiters("%", "%"))
 		b, err := p.Replace(nil, "foo %bar%", String("bar", "baz"))
 		if err != nil {
 			t.Errorf("Unexpected error %s", err)
@@ -17,41 +14,11 @@ func TestDelimiters(t *testing.T) {
 		}
 
 	}
-	{
-		p, err := New(Delimiters("", "%"))
-		if err == nil {
-			t.Errorf("Unexpected error %s", err)
-		}
-		if p != nil {
-			t.Errorf("Non nil Replacer")
-		}
-	}
-	{
-		p, err := New(Delimiters("%", ""))
-		if err == nil {
-			t.Errorf("Unexpected error %s", err)
-		}
-		if p != nil {
-			t.Errorf("Non nil Replacer")
-		}
-	}
-	{
-		p, err := New(Delimiters("", ""))
-		if err == nil {
-			t.Errorf("Unexpected error %s", err)
-		}
-		if p != nil {
-			t.Errorf("Non nil Replacer")
-		}
-	}
 
 }
 
 func TestAlias(t *testing.T) {
-	r, err := New(Alias("foo", "FOO", "Foo"))
-	if err != nil {
-		t.Errorf("Unexpected error %s", err)
-	}
+	r := New(Alias("foo", "FOO", "Foo"))
 	if alias := r.Alias("Foo"); alias != "foo" {
 		t.Errorf("Invalid alias %q", alias)
 	}
@@ -71,10 +38,7 @@ func TestAlias(t *testing.T) {
 }
 
 func TestSkip(t *testing.T) {
-	r, err := New(Skip("foo", "bar"))
-	if err != nil {
-		t.Errorf("Unexpected error %s", err)
-	}
+	r := New(Skip("foo", "bar"))
 	b, err := r.Replace(nil, "${foo} ${baz}", String("baz", "bar"))
 	if err != nil {
 		t.Errorf("Unexpected error %s", err)
