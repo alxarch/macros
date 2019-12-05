@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-type valueType uint
-
 // Value is a value replacement for a macro
 type Value struct {
 	macro Token
@@ -18,6 +16,8 @@ type Value struct {
 	typ   valueType
 	any   interface{}
 }
+
+type valueType uint
 
 const (
 	typeNone valueType = iota

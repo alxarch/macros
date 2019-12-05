@@ -4,8 +4,8 @@ import (
 	"testing"
 )
 
-func TestNew(t *testing.T) {
-	p, _ := NewParser()
+func TestReplacer(t *testing.T) {
+	p, _ := New()
 	for _, src := range []string{
 		"",
 		"${FOO}",
@@ -26,7 +26,7 @@ func TestNew(t *testing.T) {
 	}
 }
 func TestTemplate(t *testing.T) {
-	p, _ := NewParser()
+	p, _ := New()
 	s := "${FOO}"
 	tpl, err := p.Parse(s)
 	if err != nil {
@@ -41,11 +41,11 @@ func TestTemplate(t *testing.T) {
 		t.Errorf("Invalid size estimation: %d", size)
 	}
 
-	buf, err := p.AppendReplace(nil, s)
+	buf, err := p.Replace(nil, s)
 	if err != ErrMacroNotFound {
 		t.Errorf("Invalid error %s", err)
 	}
-	buf, err = tpl.AppendReplace(nil, String("FOO", "bar"))
+	buf, err = tpl.Execute(nil, String("FOO", "bar"))
 
 	if err != nil {
 		t.Error(err)
@@ -61,7 +61,7 @@ func TestURLTemplate(t *testing.T) {
 		"foo": "FOO",
 		"bar": "BAR",
 	}
-	var p Parser
+	var p Replacer
 	tpl, err := p.URL("http://example.org/foo/bar?foo=bar&bar=baz&baz=foo", params)
 	if err != nil {
 		t.Fatal(err)

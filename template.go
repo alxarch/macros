@@ -1,32 +1,21 @@
 package macros
 
 import (
-	"net/url"
-	"sort"
 	"strings"
 )
 
 // Template is a compiled template
 type Template struct {
-	parsed
-	p *Parser
-}
-
-// Parser returns the parser that parsed the template
-func (t *Template) Parser() *Parser {
-	return t.p
+	chunks []chunk
+	tail   string
 }
 
 // String renders a template
 func (t *Template) String() string {
+	var r Replacer
 	var w strings.Builder
-	t.p.render(&w, t.parsed)
+	r.render(&w, t)
 	return w.String()
-}
-
-type parsed struct {
-	chunks []chunk
-	tail   string
 }
 
 type chunk struct {
@@ -35,7 +24,7 @@ type chunk struct {
 }
 
 // Must creates a new templates or panics if there were any errors
-func Must(tpl string, options ...Option) *Template {
+func Must(tpl string, options ...Option) Template {
 	t, err := Parse(tpl, options...)
 	if err != nil {
 		panic(err)
@@ -44,16 +33,16 @@ func Must(tpl string, options ...Option) *Template {
 }
 
 // Parse creates a new template aplying options
-func Parse(tpl string, options ...Option) (*Template, error) {
-	p, err := NewParser(options...)
+func Parse(tpl string, options ...Option) (Template, error) {
+	p, err := New(options...)
 	if err != nil {
-		return nil, err
+		return Template{}, err
 	}
 	return p.Parse(tpl)
 }
 
 // EstimateSize estimates the rendered buffer size
-func (t *parsed) EstimateSize(size int) int {
+func (t *Template) EstimateSize(size int) int {
 	size *= len(t.chunks)
 	for i := range t.chunks {
 		chunk := &t.chunks[i]
@@ -63,9 +52,10 @@ func (t *parsed) EstimateSize(size int) int {
 	return size
 }
 
-// AppendReplace appends the template to a buffer replacing tokens with values
-func (t *Template) AppendReplace(buf []byte, values ...Value) ([]byte, error) {
-	return t.p.appendTemplate(buf, t.parsed, values)
+// Execute executes a template using a blank replacer appending it to a buffer
+func (t *Template) Execute(buf []byte, values ...Value) ([]byte, error) {
+	var r Replacer
+	return r.execute(buf, t, values)
 }
 
 const defaultStartDelimiter = "${"
@@ -74,46 +64,6 @@ const defaultEndDelimiter = "}"
 // DefaultDelimiters returns the default delimiters
 func DefaultDelimiters() (string, string) {
 	return defaultStartDelimiter, defaultEndDelimiter
-}
-
-// var _ Option = Delimiters{}
-
-// URL converts a URL string to a template string with a query
-func (p *Parser) URL(rawurl string, params map[string]Token) (string, error) {
-	start, end := p.Delimiters()
-	u, err := url.Parse(rawurl)
-	if err != nil {
-		return rawurl, err
-	}
-	q := u.Query()
-	for key, macro := range params {
-		q.Set(key, start+macro.String()+end)
-	}
-	bs := strings.Builder{}
-	keys := make([]string, 0, len(q))
-	for k := range q {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for i, k := range keys {
-		if i > 0 {
-			bs.WriteByte('&')
-		}
-		for j, v := range q[k] {
-			if j > 0 {
-				bs.WriteByte('&')
-			}
-			bs.WriteString(url.QueryEscape(k))
-			bs.WriteByte('=')
-			if _, isMacro := params[k]; isMacro {
-				bs.WriteString(v)
-			} else {
-				bs.WriteString(url.QueryEscape(v))
-			}
-		}
-	}
-	u.RawQuery = bs.String()
-	return u.String(), nil
 }
 
 // TokenDelimiter is the token delimiter for macro and filters
