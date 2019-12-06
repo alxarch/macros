@@ -27,12 +27,17 @@ const (
 	typeUint
 	typeAny
 	typeTime
-	// typeExpand
+	typeConcat
 )
 
 // String creates a new value replacing `macro` with a string
 func String(macro Token, s string) Value {
 	return Value{macro, s, 0, typeString, nil}
+}
+
+// Concat creates a new value replacing `macro` with a string
+func Concat(macro Token, sep string, values []string) Value {
+	return Value{macro, sep, 0, typeConcat, values}
 }
 
 // Bool creates a new value replacing `macro` with "true" or "false"
@@ -140,6 +145,16 @@ func (v *Value) AppendValue(buf []byte) ([]byte, error) {
 		return strconv.AppendInt(buf, int64(v.num), 10), nil
 	case typeTime:
 		return v.any.(time.Time).AppendFormat(buf, v.str), nil
+	case typeConcat:
+		values := v.any.([]string)
+		sep := v.str
+		for i, v := range values {
+			if i > 0 {
+				buf = append(buf, sep...)
+			}
+			buf = append(buf, v...)
+		}
+		return buf, nil
 	case typeAny:
 		if v, ok := v.any.(ValueAppender); ok {
 			return v.AppendValue(buf)
